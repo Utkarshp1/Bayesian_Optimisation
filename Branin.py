@@ -24,7 +24,7 @@ class Branin():
         self.noise_mean = noise_mean
         self.noise_variance = noise_variance
         
-        torch.manual_seed(random_state)
+        # torch.manual_seed(random_state)
         
     def forward(self, params, *args):
         '''
@@ -35,7 +35,7 @@ class Branin():
                 - params: (dict) A dict of mapping params to their
                     values. The input is similar to Ax SimpleExperiment
                     evaluation_function input format.
-                    https://ax.dev/api/core.html#simpleexperiment 
+                    https://ax.dev/api/core.html#simpleexperiment
         '''
         
         self.x1, self.x2 = params["x1"], params["x2"]
