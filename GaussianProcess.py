@@ -40,9 +40,12 @@ def _get_and_fit_simple_custom_gp(Xs, Ys, **kwargs):
     
     for i in range(gradients.shape[1]):
         gradient_models.append(SimpleCustomGP(Xs[0], gradients[:, i]))
-        mll = ExactMarginalLogLikelihood(
-            gradient_models[i].likelihood, gradient_models[i])
-        fit_gpytorch_model(mll)
+        gradient_mlls.append(
+            ExactMarginalLogLikelihood(
+                gradient_models[i].likelihood, gradient_models[i]
+            )
+        )
+        fit_gpytorch_model(gradient_mlls[i])
     
     return (function_model, gradient_models)
     
