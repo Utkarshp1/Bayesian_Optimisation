@@ -21,12 +21,15 @@ class ObjectiveFunction(torch.nn.Module):
                 - random_state: Equivalent PyTorch manual_seed
                 - negate: Multiplies the value of the function obtained
                     with -1. Use this to minimize the Objective Function.
+                - dims: The number of dimensions in the objective 
+                    function. For example, in Branin function, dims=2
         '''
         
         super().__init__()
         self.noise_mean = noise_mean
         self.noise_variance = noise_variance
         self.negate = negate
+        self.dims = dims
         
         if random_state:
             torch.manual_seed(random_state)

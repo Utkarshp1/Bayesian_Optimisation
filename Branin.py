@@ -9,11 +9,17 @@ class Branin(ObjectiveFunction):
         For information on Branin function visit:
             https://www.sfu.ca/~ssurjano/branin.html
     '''
-    def __init__(self, noise_mean=None, noise_variance=None, 
+    def __init__(self, dims, noise_mean=None, noise_variance=None, 
         random_state=None, negate=False):
         
-        super().__init__(noise_mean, noise_variance, random_state, negate)
-                
+        super().__init__(
+            noise_mean,
+            noise_variance,
+            random_state,
+            negate,
+            dims
+        )
+        
     def evaluate_true(self, X):
         '''
             This function calculates the value of the Branin function
