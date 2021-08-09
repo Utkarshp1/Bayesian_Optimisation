@@ -22,6 +22,23 @@ def generate_initial_data(obj_fn, n, dtype):
 def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
         order=0):
     '''
+        This function optimizes the acquisition function and returns the
+        points (candidates) where the acquisition function has the
+        optimal value.
+        
+        Arguments:
+        ---------
+            - acq_func: acquisition function for the objective function.
+            - grad_acq: acquisition function for the gradient function
+            - bounds: bounds for the domain of the objective function.
+            - grad_gps: list of d GPs for the gradient function.
+            - order: (int) If 0 then perform 0 order BO else perform 1st
+                order BO
+                
+        Returns:
+        -------
+            Set of candidates where the acquisition function achieves
+            it's optimal value.
     '''
     BATCH_SIZE = 2
     NUM_RESTARTS = 2
@@ -60,6 +77,21 @@ def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
     
 def get_next_query_point(obj_fn_gp, candidates):
     '''
+        This function returns the point where the objective function is
+        to be queried next.
+        
+        Arguments:
+        ---------
+            - obj_fn_gp: (BoTorch Model) This model should be the GP for
+                the objective function.
+            - candidates: (List of PyTorch tensors) List of possible 
+                candidates from which the point to be queried next is to
+                be selected.
+                
+        Returns:
+        -------
+            Returns a PyTorch tensor of shape (d, ), where d is the 
+            dimension of the input taken by the Objective Function.
     '''
     X = torch.stack(candidates).squeeze()
     posterior = obj_fn_gp.posterior(X)

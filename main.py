@@ -1,5 +1,5 @@
 import torch
-from Branin import Branin
+from test_functions import Branin
 from CustomAcquistionFunction import CustomGradientAcquistionFunction
 from BO import BO
 

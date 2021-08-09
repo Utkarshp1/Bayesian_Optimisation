@@ -5,9 +5,29 @@ from botorch.acquisition.analytic import ExpectedImprovement
 
 class BO:
     '''
+        This class implements the Bayesian Optimisation loop.
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
         order=0, budget=20):
+        '''
+            Arguments:
+            ---------
+                - obj_fn: (Instance of ObjectiveFunction class) The 
+                    function which needs to be optimized using Bayesian
+                    Optimisation.
+                - dtype: A PyTorch data type
+                - acq_func: (String) Acquisiton Function to be used for
+                    the objective function
+                - grad_acq: Acquisiton Function to be used for the 
+                    gradient function. If order=0 i.e. Zero order BO is
+                    performed then this argument will be ignored.
+                - init_examples: (int) Number of points where the 
+                    objective function is to be queried.
+                - order: (int) If 0 then perform 0 order BO else perform
+                    1st order BO
+                - budget: (int) Number of times the objective function
+                    can be evaluated
+        '''
         
         self.obj_fn = obj_fn
         self.dtype = dtype
@@ -18,6 +38,11 @@ class BO:
         self.budget = budget
    
     def optimize(self):
+        '''
+            This function performs the optimization of the Objective
+            Function.
+        '''
+        
         # Generate initial data for GP fiiting
         self.X, self.y, self.grads = generate_initial_data(
             self.obj_fn,
