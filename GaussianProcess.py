@@ -49,11 +49,11 @@ def get_and_fit_simple_custom_gp(X_train, y_train, gradients):
         -------
             A tuple of size 2 where the first element is the GP for the
             objective function and second element is a list containing
-            d+1 GPs each fitted along a different dimension of the 
+            d GPs each fitted along a different dimension of the 
             objective function.
     '''
     function_model = SimpleCustomGP(X_train, y_train)
-    mll = ExactMarginalLogLikelihood(model.likelihood, model)
+    mll = ExactMarginalLogLikelihood(function_model.likelihood, function_model)
     fit_gpytorch_model(mll)
     
     gradient_models = []
@@ -62,7 +62,7 @@ def get_and_fit_simple_custom_gp(X_train, y_train, gradients):
     # gradients = _calculate_gradients(X_train)
     
     for i in range(gradients.shape[1]):
-        gradient_models.append(SimpleCustomGP(X_train[:, i], gradients[:, i]))
+        gradient_models.append(SimpleCustomGP(X_train, gradients[:, i]))
         gradient_mlls.append(
             ExactMarginalLogLikelihood(
                 gradient_models[i].likelihood, gradient_models[i]
