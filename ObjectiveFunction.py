@@ -9,7 +9,7 @@ class ObjectiveFunction(torch.nn.Module):
         https://botorch.org/api/_modules/botorch/test_functions/base.html
     '''
     
-    def __init__(self, noise_mean=0, noise_variance=None, 
+    def __init__(self, dims, low, high, noise_mean=0, noise_variance=None, 
         random_state=None, negate=False):
         '''
             Arguments:
@@ -23,6 +23,12 @@ class ObjectiveFunction(torch.nn.Module):
                     with -1. Use this to minimize the Objective Function.
                 - dims: The number of dimensions in the objective 
                     function. For example, in Branin function, dims=2
+                - low: (A PyTorch tensor) of shape (d,) which each 
+                    dimension represents the lower limit of x along that
+                    dimension
+                - high: (A PyTorch tensor) of shape (d,) which each 
+                    dimension represents the lower limit of x along that
+                    dimension
         '''
         
         super().__init__()
@@ -30,6 +36,8 @@ class ObjectiveFunction(torch.nn.Module):
         self.noise_variance = noise_variance
         self.negate = negate
         self.dims = dims
+        self.low = low
+        self.high = high
         
         if random_state:
             torch.manual_seed(random_state)
@@ -80,7 +88,10 @@ class ObjectiveFunction(torch.nn.Module):
         if self.negate:
             self.f_x = -self.f_x
             
-        return self.f_x if batch else self.f_x.squeeze(0)
+        f_x = (self.f_x.detach().clone() if batch else 
+            self.f_x.detach().clone().squeeze(0))
+            
+        return f_x
         
     def backward(self, noise=True):
         '''
@@ -103,4 +114,4 @@ class ObjectiveFunction(torch.nn.Module):
             self.grads += (self.noise_variance * torch.randn_like(self.grads)
                     + self.noise_mean)
         
-        return self.grads
+        return self.grads.detach().clone()
