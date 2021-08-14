@@ -1,7 +1,9 @@
 import torch
+from tqdm import tqdm
 from utils import generate_initial_data, optimize_acq_func_and_get_candidates, get_next_query_point
 from GaussianProcess import get_and_fit_simple_custom_gp
 from botorch.acquisition.analytic import ExpectedImprovement
+from botorch.utils.transforms import unnormalize, standardize, normalize
 
 class BO:
     '''
@@ -50,14 +52,17 @@ class BO:
             dtype=self.dtype
         )
         
-        for i in range(self.budget):
+        for i in tqdm(range(self.budget)):
             # Fit GP
             gps = get_and_fit_simple_custom_gp(self.X, self.y, self.grads)
             obj_fn_gp, grad_gps = gps
             
             # Optimize acquisition function and get next query point
-            bounds = torch.cat([self.obj_fn.low.unsqueeze(0),
+            original_bounds = torch.cat([self.obj_fn.low.unsqueeze(0),
                             self.obj_fn.high.unsqueeze(0)]).type(self.dtype)
+            # Normalize the bounds
+            norm_bounds = torch.stack([self.X.min(dim=0)[0],self.X.max(dim=0)[0]])
+            bounds = normalize(original_bounds, bounds=norm_bounds)
             
             if self.acq_func == 'EI':
                 best_f = torch.max(self.y)
@@ -75,6 +80,9 @@ class BO:
                 best_candidate = get_next_query_point(obj_fn_gp, candidates)
             else:
                 best_candidate = candidates[0]
+            
+            # Unnormalize the best candidate
+            best_candidate = unnormalize(best_candidate, bounds=norm_bounds)
             
             # Function and gradient evaluation at the new point
             y_new = self.obj_fn.forward(best_candidate).unsqueeze(0)

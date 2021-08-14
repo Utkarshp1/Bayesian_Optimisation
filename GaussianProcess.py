@@ -6,6 +6,8 @@ from gpytorch.kernels import RBFKernel, ScaleKernel
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from botorch.fit import fit_gpytorch_model
+from botorch.optim.fit import fit_gpytorch_torch
+from botorch.utils.transforms import normalize, standardize
 
 class SimpleCustomGP(ExactGP, GPyTorchModel):
     _num_outputs = 1    # to inform GPyTorchModel API
@@ -52,22 +54,38 @@ def get_and_fit_simple_custom_gp(X_train, y_train, gradients):
             d GPs each fitted along a different dimension of the 
             objective function.
     '''
+    
+    bounds = torch.stack([X_train.min(dim=0)[0],X_train.max(dim=0)[0]])
+    
     # Initialize and fit the GP for the objective function
-    function_model = SimpleCustomGP(X_train, y_train)
+    function_model = SimpleCustomGP(
+        normalize(X_train, bounds=bounds),
+        standardize(y_train)
+    )
     mll = ExactMarginalLogLikelihood(function_model.likelihood, function_model)
-    fit_gpytorch_model(mll)
+    # fit_gpytorch_model(mll)
+    fit_gpytorch_torch(mll, track_iterations=False, options={'disp': False})
     
     gradient_models = []
     gradient_mlls = []
     
     # Initialize and fit d GPs for the gradient function
     for i in range(gradients.shape[1]):
-        gradient_models.append(SimpleCustomGP(X_train, gradients[:, i]))
+        gradient_models.append(SimpleCustomGP(
+                normalize(X_train, bounds=bounds),
+                standardize(gradients[:, i])
+            )
+        )
         gradient_mlls.append(
             ExactMarginalLogLikelihood(
                 gradient_models[i].likelihood, gradient_models[i]
             )
         )
-        fit_gpytorch_model(gradient_mlls[i])
+        # fit_gpytorch_model(gradient_mlls[i])
+        fit_gpytorch_torch(
+            gradient_mlls[i],
+            track_iterations=False,
+            options={'disp': False}
+        )
     
     return (function_model, gradient_models)
