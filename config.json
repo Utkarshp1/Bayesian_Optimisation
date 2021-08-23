@@ -1,0 +1,12 @@
+{
+	"experiment_name":
+	"objective_function":
+	"acq_func":
+	"order":
+	"budget":
+	"runs":
+	"noise_mean":
+	"noise_variance":
+	"max/min":
+	"dims":
+}

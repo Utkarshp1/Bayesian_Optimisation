@@ -1,7 +1,7 @@
 import torch
 from botorch.optim import optimize_acqf
 
-def generate_initial_data(obj_fn, n, dtype):
+def generate_initial_data(obj_fn, n, dtype, order):
     '''
         This function generates the initial data for the Bayesian
         Optimisation i.e. the data on which the GP will be fit in the
@@ -16,8 +16,11 @@ def generate_initial_data(obj_fn, n, dtype):
     X_train = torch.rand(n, obj_fn.dims, dtype=dtype)
     X_train = X_train*obj_fn.high + obj_fn.low
     y_train = obj_fn.forward(X_train)
-    grads = obj_fn.backward()
-    return X_train.detach().clone(), y_train, grads 
+    if order:
+        grads = obj_fn.backward()
+        return X_train.detach().clone(), y_train, grads
+    else:
+        return X_train.detach().clone(), y_train, None
     
 def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
         order=0):
@@ -75,7 +78,7 @@ def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
         
     return candidates
     
-def get_next_query_point(obj_fn_gp, candidates):
+def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
     '''
         This function returns the point where the objective function is
         to be queried next.
@@ -96,5 +99,6 @@ def get_next_query_point(obj_fn_gp, candidates):
     X = torch.stack(candidates).squeeze()
     posterior = obj_fn_gp.posterior(X)
     mean = posterior.mean
-    return X[torch.argmax(mean).item()]
-    
+    if method="convex":
+        exp_weights = torch.exp(mean)/T
+    return X[torch.argmax(mean).item()]   

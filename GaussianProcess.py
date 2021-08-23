@@ -70,22 +70,23 @@ def get_and_fit_simple_custom_gp(X_train, y_train, gradients):
     gradient_mlls = []
     
     # Initialize and fit d GPs for the gradient function
-    for i in range(gradients.shape[1]):
-        gradient_models.append(SimpleCustomGP(
-                normalize(X_train, bounds=bounds),
-                standardize(gradients[:, i])
+    if gradients:
+        for i in range(gradients.shape[1]):
+            gradient_models.append(SimpleCustomGP(
+                    normalize(X_train, bounds=bounds),
+                    standardize(gradients[:, i])
+                )
             )
-        )
-        gradient_mlls.append(
-            ExactMarginalLogLikelihood(
-                gradient_models[i].likelihood, gradient_models[i]
+            gradient_mlls.append(
+                ExactMarginalLogLikelihood(
+                    gradient_models[i].likelihood, gradient_models[i]
+                )
             )
-        )
-        # fit_gpytorch_model(gradient_mlls[i])
-        fit_gpytorch_torch(
-            gradient_mlls[i],
-            track_iterations=False,
-            options={'disp': False}
-        )
+            # fit_gpytorch_model(gradient_mlls[i])
+            fit_gpytorch_torch(
+                gradient_mlls[i],
+                track_iterations=False,
+                options={'disp': False}
+            )
     
     return (function_model, gradient_models)

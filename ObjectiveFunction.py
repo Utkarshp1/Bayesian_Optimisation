@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 class ObjectiveFunction(torch.nn.Module):
     '''
@@ -34,6 +35,7 @@ class ObjectiveFunction(torch.nn.Module):
         super().__init__()
         self.noise_mean = noise_mean
         self.noise_variance = noise_variance
+        self.noise_std = np.sqrt(noise_variance) if noise_variance else None
         self.negate = negate
         self.dims = dims
         self.low = low
@@ -82,7 +84,7 @@ class ObjectiveFunction(torch.nn.Module):
         self.f_x = self.evaluate_true(X=self.X)
         with torch.no_grad():
             if noise and self.noise_variance is not None:
-                self.f_x += (self.noise_variance * torch.randn_like(self.f_x) +
+                self.f_x += (self.noise_std * torch.randn_like(self.f_x) +
                     self.noise_mean)
                 
         if self.negate:
