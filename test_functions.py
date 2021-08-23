@@ -30,6 +30,7 @@ class Branin(ObjectiveFunction):
             random_state=random_state,
             negate=negate,
         )
+        self.true_opt_value = 0.397887
         
     def evaluate_true(self, X):
         '''
@@ -73,6 +74,7 @@ class Levy(ObjectiveFunction):
             random_state=random_state,
             negate=negate,
         )
+        self.true_opt_value = 0.0
         
     def evaluate_true(self, X):
         '''
@@ -100,3 +102,127 @@ class Levy(ObjectiveFunction):
         self.f_x = part1 + part2 + part3
         
         return self.f_x
+        
+class Rosenbrock(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self, dims, noise_mean=None, noise_variance=None, 
+        random_state=None, negate=False):
+        
+        low = torch.tensor([-5]*dims)
+        high = torch.tensor([10]*dims)
+        
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            random_state=random_state,
+            negate=negate,
+        )
+        self.true_opt_value = 0.0
+        
+    def evaluate_true(self, X):
+        return torch.sum(
+            100.0 * (X[..., 1:] - X[..., :-1] ** 2) ** 2 + (X[..., :-1] - 1) ** 2,
+            dim=-1,
+        )
+
+class Ackley(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self, dims, noise_mean=None, noise_variance=None, 
+        random_state=None, negate=False):
+        
+        low = torch.tensor([-32.768]*dims)
+        high = torch.tensor([32.768]*dims)
+        
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            random_state=random_state,
+            negate=negate,
+        )
+        self.true_opt_value = 0.0
+
+        self.a = 20
+        self.b = 0.2
+        self.c = 2 * math.pi
+
+    def evaluate_true(self, X):
+        a, b, c = self.a, self.b, self.c
+        part1 = -a * torch.exp(-b / math.sqrt(self.dims) * torch.norm(X, dim=-1))
+        part2 = -(torch.exp(torch.mean(torch.cos(c * X), dim=-1)))
+        return part1 + part2 + a + math.e
+
+class Hartmann(ObjectiveFunction):
+    '''
+        TO-DO: Implement Hartmann for multiple dimensions.
+    '''
+    def __init__(self, dims, noise_mean=None, noise_variance=None, 
+        random_state=None, negate=False):
+
+        if dims not in (3, 4, 6):
+            raise ValueError(f"Hartmann with dim {dims} not defined")
+        
+        low = torch.tensor([0.0]*dims)
+        high = torch.tensor([1.0]*dims)
+        
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            random_state=random_state,
+            negate=negate,
+        )
+        self.true_opt_value = -3.32237  # For 6 dim Hartmann
+
+        self.ALPHA = torch.tensor([1.0, 1.2, 3.0, 3.2])
+
+        if dims == 3:
+            A = [[3.0, 10, 30], [0.1, 10, 35], [3.0, 10, 30], [0.1, 10, 35]]
+            P = [
+                [3689, 1170, 2673],
+                [4699, 4387, 7470],
+                [1091, 8732, 5547],
+                [381, 5743, 8828],
+            ]
+        elif dims == 4:
+            A = [
+                [10, 3, 17, 3.5],
+                [0.05, 10, 17, 0.1],
+                [3, 3.5, 1.7, 10],
+                [17, 8, 0.05, 10],
+            ]
+            P = [
+                [1312, 1696, 5569, 124],
+                [2329, 4135, 8307, 3736],
+                [2348, 1451, 3522, 2883],
+                [4047, 8828, 8732, 5743],
+            ]
+        elif dims == 6:
+            self.A = torch.tensor([
+                [10, 3, 17, 3.5, 1.7, 8],
+                [0.05, 10, 17, 0.1, 8, 14],
+                [3, 3.5, 1.7, 10, 17, 8],
+                [17, 8, 0.05, 10, 0.1, 14],
+            ])
+            self.P = torch.tensor([
+                [1312, 1696, 5569, 124, 8283, 5886],
+                [2329, 4135, 8307, 3736, 1004, 9991],
+                [2348, 1451, 3522, 2883, 3047, 6650],
+                [4047, 8828, 8732, 5743, 1091, 381],
+            ])
+
+    def evaluate_true(self, X):
+        inner_sum = torch.sum(self.A * (X.unsqueeze(-2) - 0.0001 * self.P) ** 2, dim=-1)
+        H = -(torch.sum(self.ALPHA * torch.exp(-inner_sum), dim=-1))
+        if self.dims == 4:
+            H = (1.1 + H) / 0.839
+        return H
