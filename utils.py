@@ -99,6 +99,23 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
     X = torch.stack(candidates).squeeze()
     posterior = obj_fn_gp.posterior(X)
     mean = posterior.mean
-    if method="convex":
-        exp_weights = torch.exp(mean)/T
-    return X[torch.argmax(mean).item()]   
+    if method == "convex":
+        exp_weights = torch.exp(mean/T)
+        part1 = exp_weights*X
+        part2 = part1/exp_weights.sum()
+        return part2.sum(dim=0)
+    
+    if method == "minimum":
+        return X[torch.argmax(mean).item()]
+
+    if method == "best":
+        exp_weights = torch.exp(mean/T)
+        part1 = exp_weights*X
+        part2 = part1/exp_weights.sum()
+        part3 = part2.sum(dim=0).unsqueeze(0)
+
+        if obj_fn_gp.posterior(part3).mean.item() > torch.max(mean).item():
+            print("convex solution")
+            return part3[0, :]
+        else:
+            return X[torch.argmax(mean).item()]
