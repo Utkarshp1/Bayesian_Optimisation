@@ -1,0 +1,150 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+\DeclareMathOperator*{\E}{\mathbb{E}}
+\title{Bayesian Optimization}
+\begin{document}
+\maketitle
+\section{First Order Bayesian Optimization}
+First Order Bayesian Optimization (FOBO) deals with utilizing the gradient information along with the function value to find the maximum value of the function.
+One possible way to utilize the gradient information is to take advantage of the fact that the gradient vanishes at the maxima i.e. $\nabla f(x) = 0$ when 
+$f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(x) = 0$. \\
+    \subsection{Independent Surrogate Gaussian Processes}
+        If we relax the joint assumption between the objective function and its partial derivatives and model each of them using an independent Gaussian 
+        Process, then we would have (d+1) GPs, where d represents the dimension of the objective function. Mathematically,
+        \begin{equation}
+			f(\cdot) \stackrel{}{\sim} GP(\mu(\cdot), K(\cdot , \cdot))
+		\end{equation}
+        \begin{equation}
+			\frac{\partial f(\cdot)}{\partial x(i)} \stackrel{}{\sim} GP(\mu_{i}(\cdot), K_{i}(\cdot , \cdot))
+		\end{equation}
+        Therefore, we model the objective function and its partial derivatives using separate mean and kernel functions. This way we can parallelize the 
+        fitting of GPs.
+
+    \subsection{Acquisition Algorithms}
+        Since, at the point of maxima the gradient vanishes, the objective function should next be queried at these points. Therefore, we should try to 
+        minimize the expected value of absolute partial derivative. We can define a new utility function for each of the partial derivative GP as follows:
+        \begin{equation}
+			I_{i}(\textbf {x}) = \mathbb{E}_{n} \left( \left |\frac{\partial f(\cdot)}{\partial x(i)} \right | \right )     i \in {1,...,d}.
+            \label{custom_gradient_acquisition_function}
+		\end{equation}
+        Therefore, the next query point is given by,
+        \begin{equation}
+			\textbf{x}^{n+1}_{i} = arg \min_{\textbf{x} \in D} I_{i}(\textbf {x}), i \in {1,...,d}.
+		\end{equation}
+        Now, we will have d+1 suggestions for the next query point (d from each of the partial derivative GP model and 1 from the function GP model). The next
+        query point can be obtained using any of the following alternatives:
+        \begin{itemize}
+            \item In the first way, the information is aggregated by taking a weighted convex combination of all the points suggested i.e.,
+                \begin{equation}
+                    \textbf {x}^{n+1} = \sum_{i=0}^{d} \frac {exp(\mu^{(n)}(\textbf{x}^{n+1}_{i}))}{\sum_{i=0}^{d} exp(\mu^{(n)}(\textbf{x}^{n+1}_{i}))} \textbf{x}^{n+1}_{i}.
+                    \label{convex_combination}
+                \end{equation}
+            \item In the second way, the information is aggregated by taking the point that has the maximum significance i.e.,
+                \begin{equation}
+                \begin{split}
+                    i^{*} = arg \max_{i} \mu^{(n)}(\textbf{x}^{n+1}_{i}), \\
+                    \textbf{x}^{n+1} = \textbf{x}^{n+1}_{i^{*}}
+                \end{split}
+                \label{maximum_combination}
+                \end{equation}
+        \end{itemize}
+
+\section{Experiments}
+    \begin{enumerate}
+        \item
+            \textbf {Best of both the worlds} \\
+            Instead of using either (\ref{convex_combination}) or (\ref{maximum_combination}), we can combine both and picking the point which has the highest
+            mean. Let the point suggested by (\ref{convex_combination}) and (\ref{maximum_combination}) be $\textbf{x}^{n+1}_{con}$ and 
+            $\textbf{x}^{n+1}_{max}$. Then, the next query point suggested would be,
+            \begin{equation}
+                \textbf{x}^{n+1} = arg max \{\E(\textbf{x}^{n+1}_{con}), \E(\textbf{x}^{n+1}_{max})\}
+            \end{equation}
+            where the expectation is calculated using the function GP model.
+
+        \item
+            \textbf {cUpper} \\
+            We slightly modify (\ref{convex_combination}) to also include the variance of the objective function value at the suggested points. This will help
+            to make the search little bit explorative in nature rather than being purely exploitative in nature. The idea is similar to Upper Confidence Bound 
+            acquisition function. Mathematically, the new equation would be,
+            \begin{equation}
+                \textbf {x}^{n+1} = \sum_{i=0}^{d} \frac {exp(\mu^{(n)}(\textbf{x}^{n+1}_{i})+\alpha\sigma^{(n)}(\textbf{x}^{n+1}_{i}) )}{\sum_{i=0}^{d} exp(\mu^{(n)}(\textbf{x}^{n+1}_{i})+\alpha\sigma^{(n)}(\textbf{x}^{n+1}_{i}))} \textbf{x}^{n+1}_{i}.
+                \label{cUpper_combination}
+            \end{equation}
+            The hyperparameter $\alpha$ can be decreased gradually using a temperature schedule to make the search more exploitative.
+
+        \item
+            \textbf {(\ref{custom_gradient_acquisition_function}) + variance} \\
+            We slightly modify (\ref{custom_gradient_acquisition_function}) to also include the variance of the absolute partial derivative. This way we can
+            eliminate those points which although have mean absolute partial derivative close to 0 but also have high variance. In other words, this would make
+            the search more exploitative in nature. Mathematically,
+            \begin{equation}
+                I_{i}(\textbf {x}) = \mathbb{E}_{n} \left( \left |\frac{\partial f(\cdot)}{\partial x(i)} \right | \right ) +  \beta\sigma_{n} \left( \left |\frac{\partial f(\cdot)}{\partial x(i)} \right | \right )   i \in {1,...,d}.
+                \label{custom_gradient_acquisition_function_plus_variance}
+            \end{equation}
+            Therefore, the next query point is given by,
+            \begin{equation}
+                \textbf{x}^{n+1}_{i} = arg \min_{\textbf{x} \in D} I_{i}(\textbf {x}), i \in {1,...,d}.
+            \end{equation}
+            The hyperparameter $\beta$ can be tuned using a temperature schedule.
+
+        \item
+            In this experiment we ignore the point suggested by the function GP model while taking the convex combination in (\ref{convex_combination}). In 
+            other words, while taking the convex combination we just consider the points suggested by the $d$ partial derivative GP models. This way we try to
+            find how important or useful is the gradient information. Mathematically,
+            \begin{equation}
+                \textbf {x}^{n+1} = \sum_{i=1}^{d} \frac {exp(\mu_{(n)}(\textbf{x}^{n+1}_{i}))}{\sum_{i=1}^{d} exp(\mu_{(n)}(\textbf{x}^{n+1}_{i}))} \textbf{x}^{n+1}_{i}.
+                \label{convex_combination_4}
+            \end{equation} 
+
+        \item
+            We suggest another method apart from (\ref{convex_combination}) and (\ref{maximum_combination}), to combine the points suggested by $(d+1)$ GP 
+            models. In this method, we try to just leverage the gradient information and hence ignore the point suggested by the function GP model. We 
+            calculate the mean and variance of partial derivatives at each of the remaining $d$ suggested point using the $d$ partial derivative GPs. For each
+            of the $d$ we sum the mean and variance of partial derivative and stack them into a vector. This vector can be thought of as the gradient of the 
+            objective function at the location. So, we choose the point with the lowest l2-norm of this gradient vector as our next query point. 
+            %Mathematically,
+            \begin{equation}
+                \frac {\partial f(\cdot)}{\partial \textbf{x}_{i}^{n+1}} = \begin{bmatrix}
+                    \frac{\partial f(\cdot)}{\partial x_{i}^{n+1}(1)} \\
+                    \frac{\partial f(\cdot)}{\partial x_{i}^{n+1}(2)} \\
+                    \vdots \\
+                    \frac{\partial f(\cdot)}{\partial x_{i}^{n+1}(d)}
+                \end{bmatrix} \approx \begin{bmatrix}
+                    \mu^{(n)}_{1}(\textbf{x}_{i}^{n+1}) + \sigma^{(n)}_{1}(\textbf{x}_{i}^{n+1}) \\
+                    \mu^{(n)}_{2}(\textbf{x}_{i}^{n+1}) + \sigma^{(n)}_{2}(\textbf{x}_{i}^{n+1}) \\
+                    \vdots \\
+                    \mu^{(n)}_{d}(\textbf{x}_{i}^{n+1}) + \sigma^{(n)}_{d}(\textbf{x}_{i}^{n+1})
+                \end{bmatrix}
+            \end{equation}
+            where $\mu^{(n)}_{j}(\cdot)$ and $\sigma^{(n)}_{j}$ represents the mean and variance function of the jth dimension partial derivative.
+            Therefore, the next query point is given by,
+            \begin{equation}
+                \textbf{x}^{n+1} = arg \min_{i} \left | \left | \frac {\partial f(\cdot)}{\partial \textbf{x}_{i}^{n+1}} \right | \right |_2
+            \end{equation}
+
+        \item
+            Instead of having $(d+1)$ GPs for the objective function and its partial derivatives, we have a single GP for 
+            \begin{equation}
+                -f(x) + \gamma\left | \left | \frac {\partial f(\cdot)}{\partial \textbf{x}} \right | \right|_1
+            \end{equation}
+            This way we can increase the steepness of the original objective function and therefore, reach to the optimal value faster. However, since the 
+            addition of norm of the gradient can artificial maximas, we use a temperature schedule for $\gamma$ so that eventually the influence of the 
+            norm of the gradient term becomes zero.
+
+        \item
+            Instead of using mean in (\ref{convex_combination}) and (\ref{maximum_combination}), we use the Expected Improvement of the point 
+            $\textbf{x}_{i}^{n+1}$ to calculate the convex combination or obtianing the point with maximum significance. Mathematically, 
+            (\ref{convex_combination}) transforms into, 
+            \begin{equation}
+                \textbf {x}^{n+1} = \sum_{i=0}^{d} \frac {exp(EI^{(n)}(\textbf{x}^{n+1}_{i}))}{\sum_{i=0}^{d} exp(EI^{(n)}(\textbf{x}^{n+1}_{i}))} \textbf{x}^{n+1}_{i}.
+            \end{equation}
+            and (\ref{maximum_combination}) transforms into,
+            \begin{equation}
+            \begin{split}
+                i^{*} = arg \max_{i} EI^{(n)}(\textbf{x}^{n+1}_{i}), \\
+                \textbf{x}^{n+1} = \textbf{x}^{n+1}_{i^{*}}
+            \end{split}
+            \end{equation}
+            Note, that the Expected Improvement is calculated using the objective function GP model.
+    \end{enumerate}
+\end{document}
