@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from botorch.optim import optimize_acqf
 
 def generate_initial_data(obj_fn, n, dtype, order):
@@ -99,19 +100,20 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
     X = torch.stack(candidates).squeeze()
     posterior = obj_fn_gp.posterior(X)
     mean = posterior.mean
+    variance = posterior.variance
     if method == "convex":
-        exp_weights = torch.exp(mean/T)
+        exp_weights = torch.exp(mean + variance/T)
         part1 = exp_weights*X
-        part2 = part1/exp_weights.sum()
+        part2 = part1/(exp_weights.sum())
         return part2.sum(dim=0)
     
     if method == "minimum":
-        return X[torch.argmax(mean).item()]
+        return X[torch.argmax(mean + variance).item()]
 
     if method == "best":
         exp_weights = torch.exp(mean/T)
         part1 = exp_weights*X
-        part2 = part1/exp_weights.sum()
+        part2 = part1/(exp_weights.sum())
         part3 = part2.sum(dim=0).unsqueeze(0)
 
         if obj_fn_gp.posterior(part3).mean.item() > torch.max(mean).item():
@@ -119,3 +121,9 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
             return part3[0, :]
         else:
             return X[torch.argmax(mean).item()]
+
+def expo_temp_schedule(iter, T0=10000, alpha=0.9):
+    return T0*np.power(alpha, iter)
+    
+def alpha_schedule(iter, a0=10, alpha=0.99):
+    pass

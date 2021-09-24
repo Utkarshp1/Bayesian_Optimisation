@@ -1,6 +1,6 @@
 import torch
 from tqdm import tqdm
-from utils import generate_initial_data, optimize_acq_func_and_get_candidates, get_next_query_point
+from utils import generate_initial_data, optimize_acq_func_and_get_candidates, get_next_query_point, expo_temp_schedule
 from GaussianProcess import get_and_fit_simple_custom_gp
 from botorch.acquisition.analytic import ExpectedImprovement
 from botorch.utils.transforms import unnormalize, standardize, normalize
@@ -10,7 +10,8 @@ class BO:
         This class implements the Bayesian Optimisation loop.
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
-        order=0, budget=20):
+        order=0, budget=20, query_point_selection="convex", temp_schedule=False,
+        tEI=False):
         '''
             Arguments:
             ---------
@@ -38,6 +39,9 @@ class BO:
         self.grad_acq = grad_acq
         self.order = order
         self.budget = budget
+        self.query_point_selection = query_point_selection
+        self.temp_schedule = temp_schedule
+        self.tEI = tEI
    
     def optimize(self):
         '''
@@ -65,6 +69,11 @@ class BO:
             order=self.order
         )
         
+        if self.tEI:
+            self.y = self.y + torch.linalg.vector_norm(self.grads, dim=-1)
+            self.grads = None
+            self.order = 0
+        
         for i in tqdm(range(self.budget)):
             # Fit GP
             gps = get_and_fit_simple_custom_gp(self.X, self.y, self.grads)
@@ -90,12 +99,21 @@ class BO:
             )
             
             if self.order:
-                best_candidate = get_next_query_point(obj_fn_gp, candidates)
+                temp = expo_temp_schedule(i) if self.temp_schedule else 1
+                best_candidate = get_next_query_point(
+                    obj_fn_gp,
+                    candidates,
+                    self.query_point_selection,
+                    temp  
+                )
             else:
                 best_candidate = candidates[0][0]
             
             # Unnormalize the best candidate
             best_candidate = unnormalize(best_candidate, bounds=norm_bounds)
+            
+            if self.tEI:
+                self.order = 1
             
             # Function and gradient evaluation at the new point
             y_new = self.obj_fn.forward(best_candidate).unsqueeze(0)
@@ -108,6 +126,9 @@ class BO:
             self.y = torch.cat([self.y, y_new])
             if self.order:
                 self.grads = torch.cat([self.grads, grad_new])
+                
+            if self.tEI:
+                self.order = 0
             
         return self.X, self.y, self.grads
         
