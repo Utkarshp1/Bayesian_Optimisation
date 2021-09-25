@@ -53,13 +53,13 @@ $f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(
     \begin{enumerate}
         \item
             \textbf {Best of both the worlds} \\
-            Instead of using either (\ref{convex_combination}) or (\ref{maximum_combination}), we can combine both and picking the point which has the highest
+            Instead of using either (\ref{convex_combination}) or (\ref{maximum_combination}), we can combine both and pick the point which has the highest
             mean. Let the point suggested by (\ref{convex_combination}) and (\ref{maximum_combination}) be $\textbf{x}^{n+1}_{con}$ and 
             $\textbf{x}^{n+1}_{max}$. Then, the next query point suggested would be,
             \begin{equation}
-                \textbf{x}^{n+1} = arg max \{\E(\textbf{x}^{n+1}_{con}), \E(\textbf{x}^{n+1}_{max})\}
+                \textbf{x}^{n+1} = arg max \{\mu^{(n)}(\textbf{x}^{n+1}_{con}), \mu^{(n)}(\textbf{x}^{n+1}_{max})\}
             \end{equation}
-            where the expectation is calculated using the function GP model.
+            where the mean is calculated using the function GP model.
 
         \item
             \textbf {cUpper} \\
@@ -70,7 +70,8 @@ $f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(
                 \textbf {x}^{n+1} = \sum_{i=0}^{d} \frac {exp(\mu^{(n)}(\textbf{x}^{n+1}_{i})+\alpha\sigma^{(n)}(\textbf{x}^{n+1}_{i}) )}{\sum_{i=0}^{d} exp(\mu^{(n)}(\textbf{x}^{n+1}_{i})+\alpha\sigma^{(n)}(\textbf{x}^{n+1}_{i}))} \textbf{x}^{n+1}_{i}.
                 \label{cUpper_combination}
             \end{equation}
-            The hyperparameter $\alpha$ can be decreased gradually using a temperature schedule to make the search more exploitative.
+            The hyperparameter $\alpha$ can be decreased gradually using a temperature schedule to make the search more exploitative. In the experiment
+            $\alpha=1$ was used.
 
         \item
             \textbf {(\ref{custom_gradient_acquisition_function}) + variance} \\
@@ -85,7 +86,8 @@ $f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(
             \begin{equation}
                 \textbf{x}^{n+1}_{i} = arg \min_{\textbf{x} \in D} I_{i}(\textbf {x}), i \in {1,...,d}.
             \end{equation}
-            The hyperparameter $\beta$ can be tuned using a temperature schedule.
+            The hyperparameter $\beta$ can be tuned using a temperature schedule. In the experiment, $\beta=1$ was used. \\
+            Once, we obtain $(d+1)$ suggestions, we combine them using (\ref{convex_combination}), to get the next query point.
 
         \item
             In this experiment we ignore the point suggested by the function GP model while taking the convex combination in (\ref{convex_combination}). In 
@@ -116,7 +118,7 @@ $f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(
                     \mu^{(n)}_{d}(\textbf{x}_{i}^{n+1}) + \sigma^{(n)}_{d}(\textbf{x}_{i}^{n+1})
                 \end{bmatrix}
             \end{equation}
-            where $\mu^{(n)}_{j}(\cdot)$ and $\sigma^{(n)}_{j}$ represents the mean and variance function of the jth dimension partial derivative.
+            where $\mu^{(n)}_{j}(\cdot)$ and $\sigma^{(n)}_{j}(\cdot)$ represents the mean and variance function of the jth dimension partial derivative.
             Therefore, the next query point is given by,
             \begin{equation}
                 \textbf{x}^{n+1} = arg \min_{i} \left | \left | \frac {\partial f(\cdot)}{\partial \textbf{x}_{i}^{n+1}} \right | \right |_2
@@ -128,8 +130,13 @@ $f(x)$ is maximum. In other words, we search for points $x$ such that $\nabla f(
                 -f(x) + \gamma\left | \left | \frac {\partial f(\cdot)}{\partial \textbf{x}} \right | \right|_1
             \end{equation}
             This way we can increase the steepness of the original objective function and therefore, reach to the optimal value faster. However, since the 
-            addition of norm of the gradient can artificial maximas, we use a temperature schedule for $\gamma$ so that eventually the influence of the 
-            norm of the gradient term becomes zero.
+            addition of norm of the gradient can create artificial maximas, we use a temperature schedule for $\gamma$ so that eventually the influence of the 
+            norm of the gradient term becomes zero. The temperature schedule used in the experiment was
+            \begin{equation}
+                \gamma_{t} = \gamma_{0}*\delta^{t}
+            \end{equation}
+            where $t$ represents the number of iterations, $\gamma_{t}$ represents the value of $\gamma$ after $t$ iterations. The value of $\gamma_{0}$ and 
+            $\delta$ was set to $1$ and $0.95$ respectively.
 
         \item
             Instead of using mean in (\ref{convex_combination}) and (\ref{maximum_combination}), we use the Expected Improvement of the point 
