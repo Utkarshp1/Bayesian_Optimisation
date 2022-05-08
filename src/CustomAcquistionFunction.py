@@ -38,6 +38,11 @@ class CustomGradientAcquistionFunction(AnalyticAcquisitionFunction):
                 - X: (A PyTorch Tensor) Shape batch_size x q x d, where
                     d is the dimension of the input taken by the 
                     Objective Function
+
+            Returns:
+            -------
+                PyTorch Tensor: A `(b)`-dim Tensor of Upper Confidence 
+                    Bound values at the given design points `X`.
         '''
         torch.pi = torch.acos(torch.zeros(1)).item() * 2
         
@@ -49,4 +54,8 @@ class CustomGradientAcquistionFunction(AnalyticAcquisitionFunction):
         pdf_value = (torch.exp(std_normal.log_prob(mean/sigma)))
         acq_value = (2*sigma*(1/torch.sqrt(torch.tensor(2*torch.pi)))*pdf_value 
             + mean*(1-2*std_normal.cdf(-mean/sigma)))
-        return acq_value
+
+        if not self.maximize:
+            acq_value = -acq_value
+        
+        return acq_value 

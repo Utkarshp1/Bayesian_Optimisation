@@ -1,3 +1,4 @@
+import torch
 from botorch.models.gpytorch import GPyTorchModel
 from gpytorch.distributions import MultivariateNormal
 from gpytorch.means import ConstantMean
@@ -70,7 +71,7 @@ def get_and_fit_simple_custom_gp(X_train, y_train, gradients):
     gradient_mlls = []
     
     # Initialize and fit d GPs for the gradient function
-    if gradients:
+    if gradients is not None:
         for i in range(gradients.shape[1]):
             gradient_models.append(SimpleCustomGP(
                     normalize(X_train, bounds=bounds),

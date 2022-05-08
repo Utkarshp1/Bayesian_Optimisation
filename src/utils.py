@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from botorch.optim import optimize_acqf
 
-def generate_initial_data(obj_fn, n, dtype, order):
+def generate_initial_data(obj_fn, n, dtype, order=0):
     '''
         This function generates the initial data for the Bayesian
         Optimisation i.e. the data on which the GP will be fit in the
@@ -13,6 +13,8 @@ def generate_initial_data(obj_fn, n, dtype, order):
             - obj_fn: A object of ObjectiveFunction class
             - n: The number of training examples to be generated.
             - dtype: PyTorch dtype
+            - order: If order=1 then gradient information also returned.
+                If order=0 then gradient information not returned.
     '''
     X_train = torch.rand(n, obj_fn.dims, dtype=dtype)
     X_train = X_train*obj_fn.high + obj_fn.low
@@ -90,25 +92,29 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
                 the objective function.
             - candidates: (List of PyTorch tensors) List of possible 
                 candidates from which the point to be queried next is to
-                be selected.
+                be selected. Each element of candidates is a PyTorch 
+                tensor of shape (q, d), where d is the dimension of the
+                input taken by the Objective Function and for q refer to
+                BoTorch documentation of `optimize_acqf`. 
                 
         Returns:
         -------
             Returns a PyTorch tensor of shape (d, ), where d is the 
             dimension of the input taken by the Objective Function.
     '''
-    X = torch.stack(candidates).squeeze()
+
+    X = torch.stack(candidates).squeeze(-2)
     posterior = obj_fn_gp.posterior(X)
     mean = posterior.mean
-    variance = posterior.variance
+
     if method == "convex":
-        exp_weights = torch.exp(mean + variance/T)
+        exp_weights = torch.exp(mean/T)
         part1 = exp_weights*X
         part2 = part1/(exp_weights.sum())
         return part2.sum(dim=0)
     
     if method == "minimum":
-        return X[torch.argmax(mean + variance).item()]
+        return X[torch.argmax(mean).item()]
 
     if method == "best":
         exp_weights = torch.exp(mean/T)

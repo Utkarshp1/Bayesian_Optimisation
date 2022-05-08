@@ -28,7 +28,7 @@ class ObjectiveFunction(torch.nn.Module):
                     dimension represents the lower limit of x along that
                     dimension
                 - high: (A PyTorch tensor) of shape (d,) which each 
-                    dimension represents the lower limit of x along that
+                    dimension represents the upper limit of x along that
                     dimension
         '''
         
@@ -40,9 +40,6 @@ class ObjectiveFunction(torch.nn.Module):
         self.dims = dims
         self.low = low
         self.high = high
-        
-        if random_state:
-            torch.manual_seed(random_state)
             
     def evaluate_true(self, X):
         '''
@@ -50,6 +47,9 @@ class ObjectiveFunction(torch.nn.Module):
             at X without noise. X is a tensor of shape batch_size x d,
             where d is the dimension of the input taken by the Objective
             Function.
+
+            Returns a PyTorch tensor of shape batch_size x 1 if the 
+            objective function is a single output function.
         '''
         raise NotImplementedError
         
@@ -63,13 +63,15 @@ class ObjectiveFunction(torch.nn.Module):
             
             Arguments:
             ---------
-                - X: A PyTorch tensor of shape (batch_size, d)
+                - X: A PyTorch tensor of shape (batch_size, d) or (d, ).
                 - noise (boolean): Indicates whether noise should be
                     added.
                     
             Returns:
             -------
-                - A PyTorch Tensor of shape (batch_size).
+                - A PyTorch Tensor of shape (batch_size, 1) or (1, ) 
+                    depending on whether the input X is (batch_size, d)
+                    or (d, ).
         '''
         
         self.X = X.detach().clone()
@@ -105,6 +107,10 @@ class ObjectiveFunction(torch.nn.Module):
             ---------
                 - noise (boolean): Indicates whether noise should be
                     added.
+
+            Returns:
+            -------
+                - A PyTorch Tensor of shape (batch_size, d).
         '''
         
         external_grad = torch.tensor([1.]*self.X.shape[0])

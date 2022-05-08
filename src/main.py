@@ -1,27 +1,25 @@
 import torch
-from test_functions import Branin, Levy
-from CustomAcquistionFunction import CustomGradientAcquistionFunction
-from BO import BO
+from experiments import Experiment
 
 dtype = torch.double
 BUDGET = 20
 
-# Initialize the Objective Function
-branin = Branin(
-    noise_mean=0,
-    noise_variance=0.1, 
-    random_state=42,
-    negate=True
-)
+config = {
+    "experiment_name": "levy-try",
+    "objective_function": "le_branke",
+    "acq_func": "EI",
+    "order": 1,
+    "budget": 100,
+    "runs": 2,
+    "noise_mean": 0.0,
+    "noise_variance": 0.01,
+    "max/min": "max",
+    "dims": 1,
+    "query_point_selection": "convex",
+    "num_restarts": 2,
+    "raw_samples": 32,
+    "random_seed": 42
+}
 
-bo = BO(
-    obj_fn=branin,
-    dtype=dtype,
-    acq_func='EI',
-    grad_acq=CustomGradientAcquistionFunction,
-    init_examples=5,
-    order=1, 
-    budget=BUDGET
-)
-
-print(bo.optimize())
+experiment = Experiment(is_major_change=False, config=config, dtype=dtype)
+experiment.perform_experiment()

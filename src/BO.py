@@ -10,8 +10,7 @@ class BO:
         This class implements the Bayesian Optimisation loop.
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
-        order=0, budget=20, query_point_selection="convex", temp_schedule=False,
-        tEI=False):
+        order=0, budget=20, query_point_selection="convex", temp_schedule=False):
         '''
             Arguments:
             ---------
@@ -30,6 +29,12 @@ class BO:
                     1st order BO
                 - budget: (int) Number of times the objective function
                     can be evaluated
+                - query_point_selection: (string) If set to "convex" 
+                    then convex combination used for selecting the next
+                    query point. If set to "maximum" then maximum 
+                    significance method used for selecting the next 
+                    query point.
+                - temp_schedule:
         '''
         
         self.obj_fn = obj_fn
@@ -41,7 +46,6 @@ class BO:
         self.budget = budget
         self.query_point_selection = query_point_selection
         self.temp_schedule = temp_schedule
-        self.tEI = tEI
    
     def optimize(self):
         '''
@@ -69,14 +73,13 @@ class BO:
             order=self.order
         )
         
-        if self.tEI:
-            self.y = self.y + torch.linalg.vector_norm(self.grads, dim=-1)
-            self.grads = None
-            self.order = 0
-        
         for i in tqdm(range(self.budget)):
             # Fit GP
-            gps = get_and_fit_simple_custom_gp(self.X, self.y, self.grads)
+            gps = get_and_fit_simple_custom_gp(
+                self.X.detach().clone(), 
+                self.y.detach().clone(), 
+                self.grads.detach().clone()
+            )
             obj_fn_gp, grad_gps = gps
             
             # Optimize acquisition function and get next query point
@@ -87,7 +90,7 @@ class BO:
             bounds = normalize(original_bounds, bounds=norm_bounds)
             
             if self.acq_func == 'EI':
-                best_f = torch.max(self.y)
+                best_f = torch.max(standardize(self.y))
                 acq_func = ExpectedImprovement(obj_fn_gp, best_f=best_f)
 
             candidates = optimize_acq_func_and_get_candidates(
@@ -112,13 +115,10 @@ class BO:
             # Unnormalize the best candidate
             best_candidate = unnormalize(best_candidate, bounds=norm_bounds)
             
-            if self.tEI:
-                self.order = 1
-            
             # Function and gradient evaluation at the new point
-            y_new = self.obj_fn.forward(best_candidate).unsqueeze(0)
+            y_new = self.obj_fn.forward(best_candidate).unsqueeze(0).detach().clone()
             if self.order:
-                grad_new = self.obj_fn.backward()
+                grad_new = self.obj_fn.backward().detach().clone()
             best_candidate = best_candidate.unsqueeze(0)
             
             # Update X, y and grads
@@ -126,9 +126,6 @@ class BO:
             self.y = torch.cat([self.y, y_new])
             if self.order:
                 self.grads = torch.cat([self.grads, grad_new])
-                
-            if self.tEI:
-                self.order = 0
             
         return self.X, self.y, self.grads
         

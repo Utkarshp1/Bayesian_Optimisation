@@ -2,6 +2,52 @@ import math
 import torch
 from ObjectiveFunction import ObjectiveFunction
 
+class LeBranke(ObjectiveFunction):
+    '''
+        This class implements a simple 1D function from Le and Branke,
+        "Bayesian Optimization Searching for Robust Solutions." In
+        Proceedings of the 2020 Winter Simulation Conference. The 
+        function is defined as follows:
+            -0.5(x+1)sin(pi*x**2)
+
+        Note that this function has to be maximised in the domain
+        [0.1, 2.1]. The function attains maximum value of 1.43604
+        at x=1.87334.
+    '''
+
+    def __init__(self, noise_mean=None, noise_variance=None, 
+        negate=False):
+
+        dims = 1
+        low = torch.tensor([0.1])
+        high = torch.tensor([2.1])
+
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            negate=negate,
+        )
+
+        self.true_opt_value = 1.43604
+
+    def evaluate_true(self, X):
+        '''
+            This function calculates the value of the Branin function
+            without any noise.
+            
+            For more information, refer to the ObjectiveFunction class
+            docs.
+        '''
+        torch.pi = torch.acos(torch.zeros(1)).item() * 2
+
+        self.f_x = -0.5*(X+1)*torch.sin(torch.pi*X**2)
+
+        return self.f_x.squeeze(-1)
+
+
 class Branin(ObjectiveFunction):
     '''
         This class implements the Branin function, a simple benchmark
@@ -15,7 +61,7 @@ class Branin(ObjectiveFunction):
             https://www.sfu.ca/~ssurjano/branin.html
     '''
     def __init__(self, noise_mean=None, noise_variance=None, 
-        random_state=None, negate=False):
+        negate=False):
         
         dims = 2
         low = torch.tensor([-5, 0])
@@ -27,7 +73,6 @@ class Branin(ObjectiveFunction):
             high,
             noise_mean=noise_mean,
             noise_variance=noise_variance,
-            random_state=random_state,
             negate=negate,
         )
         self.true_opt_value = 0.397887
@@ -60,7 +105,7 @@ class Levy(ObjectiveFunction):
             https://www.sfu.ca/~ssurjano/levy.html
     '''
     def __init__(self, dims, noise_mean=None, noise_variance=None, 
-        random_state=None, negate=False):
+        negate=False):
         
         low = torch.tensor([-10]*dims)
         high = torch.tensor([10]*dims)
@@ -71,7 +116,6 @@ class Levy(ObjectiveFunction):
             high,
             noise_mean=noise_mean,
             noise_variance=noise_variance,
-            random_state=random_state,
             negate=negate,
         )
         self.true_opt_value = 0.0
@@ -107,7 +151,7 @@ class Rosenbrock(ObjectiveFunction):
     '''
     '''
     def __init__(self, dims, noise_mean=None, noise_variance=None, 
-        random_state=None, negate=False):
+        negate=False):
         
         low = torch.tensor([-5]*dims)
         high = torch.tensor([10]*dims)
@@ -118,7 +162,6 @@ class Rosenbrock(ObjectiveFunction):
             high,
             noise_mean=noise_mean,
             noise_variance=noise_variance,
-            random_state=random_state,
             negate=negate,
         )
         self.true_opt_value = 0.0
@@ -133,7 +176,7 @@ class Ackley(ObjectiveFunction):
     '''
     '''
     def __init__(self, dims, noise_mean=None, noise_variance=None, 
-        random_state=None, negate=False):
+        negate=False):
         
         low = torch.tensor([-32.768]*dims)
         high = torch.tensor([32.768]*dims)
@@ -144,7 +187,6 @@ class Ackley(ObjectiveFunction):
             high,
             noise_mean=noise_mean,
             noise_variance=noise_variance,
-            random_state=random_state,
             negate=negate,
         )
         self.true_opt_value = 0.0
@@ -164,7 +206,7 @@ class Hartmann(ObjectiveFunction):
         TO-DO: Implement Hartmann for multiple dimensions.
     '''
     def __init__(self, dims, noise_mean=None, noise_variance=None, 
-        random_state=None, negate=False):
+        negate=False):
 
         if dims not in (3, 4, 6):
             raise ValueError(f"Hartmann with dim {dims} not defined")
@@ -178,7 +220,6 @@ class Hartmann(ObjectiveFunction):
             high,
             noise_mean=noise_mean,
             noise_variance=noise_variance,
-            random_state=random_state,
             negate=negate,
         )
         self.true_opt_value = -3.32237  # For 6 dim Hartmann
@@ -226,3 +267,13 @@ class Hartmann(ObjectiveFunction):
         if self.dims == 4:
             H = (1.1 + H) / 0.839
         return H
+
+if __name__ == "__main__":
+    '''
+        For testing purposes.
+    '''
+    le_branke = LeBranke()
+    assert round(le_branke.evaluate_true(torch.tensor([[1.87334]])).item(), 4) == 1.4360
+    assert round(le_branke.evaluate_true(torch.tensor([[1.23223]])).item(), 5) == 1.11425
+    assert round(le_branke.evaluate_true(torch.tensor([[1.58504]])).item(), 5) == -1.29155
+    assert round(le_branke.evaluate_true(torch.tensor([[0.734545]])).item(), 6) == -0.860584

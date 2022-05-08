@@ -49,6 +49,12 @@ class Experiment():
         
         
     def _get_appropriate_func(self):
+        if self.config["objective_function"] == 'le_branke':
+            return LeBranke(
+                noise_mean=self.config["noise_mean"],
+                noise_variance=self.config["noise_variance"],
+                negate=(self.config["max/min"] == "min")
+            )
         if self.config["objective_function"] == 'branin':
             return Branin(
                 noise_mean=self.config["noise_mean"],
@@ -132,10 +138,16 @@ class Experiment():
             
         
     def plot_results(self):
-        cum_min, _ = torch.cummin(self.y, dim=0)
-        self.regret = torch.log10(
-            torch.abs(cum_min - self.obj_fn.true_opt_value)
-        )
+        if self.config["max/min"] == "min":
+            cum_min, _ = torch.cummin(self.y, dim=0)
+            self.regret = torch.log10(
+                torch.abs(cum_min - self.obj_fn.true_opt_value)
+            )
+        else:
+            cum_max, _ = torch.cummax(self.y, dim=0)
+            self.regret = torch.log10(
+                torch.abs(cum_max - self.obj_fn.true_opt_value)
+            )
         self.mean_regret = self.regret.mean(dim=-1)
         self.std_regret = self.regret.std(dim=-1)
         
