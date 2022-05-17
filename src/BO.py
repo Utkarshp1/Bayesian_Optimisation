@@ -10,7 +10,9 @@ class BO:
         This class implements the Bayesian Optimisation loop.
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
-        order=0, budget=20, query_point_selection="convex", temp_schedule=False):
+        order=0, budget=20, query_point_selection="convex", temp_schedule=False,
+        num_restarts=2, raw_samples=32, 
+        grad_acq_name="SumGradientAcquisitionFunction"):
         '''
             Arguments:
             ---------
@@ -35,6 +37,16 @@ class BO:
                     significance method used for selecting the next 
                     query point.
                 - temp_schedule:
+                - num_restarts: Number of restarts for optimizing the 
+                    acquisition function. Refer to BoTorch docs for
+                    `optimize_acqf` for more information.
+                - raw_samples: Number of raw samples for optimizing the
+                    acquisition function. Refer to BoTorch docs for
+                    `optimize_acqf` for more information.
+                - grad_acq_name: Name of the gradient acquisition 
+                    function. Can take values: 
+                    [SumGradientAcquisitionFunction, 
+                    PrabuAcquistionFunction]
         '''
         
         self.obj_fn = obj_fn
@@ -46,6 +58,9 @@ class BO:
         self.budget = budget
         self.query_point_selection = query_point_selection
         self.temp_schedule = temp_schedule
+        self.num_restarts = num_restarts
+        self.raw_samples = raw_samples
+        self.grad_acq_name = grad_acq_name
    
     def optimize(self):
         '''
@@ -98,7 +113,10 @@ class BO:
                 grad_acq=self.grad_acq,
                 bounds=bounds,
                 grad_gps=grad_gps,
-                order=self.order
+                order=self.order,
+                num_restarts=self.num_restarts,
+                raw_samples=self.raw_samples,
+                grad_acq_name=self.grad_acq_name
             )
             
             if self.order:

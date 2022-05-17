@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from botorch.optim import optimize_acqf
 
+from CustomAcquistionFunction import *
+
 def generate_initial_data(obj_fn, n, dtype, order=0):
     '''
         This function generates the initial data for the Bayesian
@@ -26,7 +28,8 @@ def generate_initial_data(obj_fn, n, dtype, order=0):
         return X_train.detach().clone(), y_train, None
     
 def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
-        order=0):
+        order=0, num_restarts=2, raw_samples=32, 
+        grad_acq_name="SumGradientAcquisitionFunction"):
     '''
         This function optimizes the acquisition function and returns the
         points (candidates) where the acquisition function has the
@@ -47,8 +50,8 @@ def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
             it's optimal value.
     '''
     BATCH_SIZE = 2
-    NUM_RESTARTS = 2
-    RAW_SAMPLES = 32
+    NUM_RESTARTS = num_restarts
+    RAW_SAMPLES = raw_samples
 
     candidates = []
     
@@ -66,8 +69,22 @@ def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
     # Optimize the acquisition function for the gradient function if
     # first order Bayesian Optimisation
     if order:
-        for grad_gp in grad_gps:
-            acq_func = grad_acq(grad_gp)
+        if grad_acq_name == "PrabuAcquistionFunction":
+            for grad_gp in grad_gps:
+                acq_func = grad_acq(grad_gp)
+
+                candidate, _ = optimize_acqf(
+                    acq_function=acq_func,
+                    bounds=bounds,
+                    q=1,
+                    num_restarts=NUM_RESTARTS,
+                    raw_samples=RAW_SAMPLES,  # used for intialization heuristic
+                    options={"batch_limit": 5, "maxiter": 200},
+                )
+                candidates.append(candidate)
+        
+        if grad_acq_name == "SumGradientAcquisitionFunction":
+            acq_func = grad_acq(grad_gps)
 
             candidate, _ = optimize_acqf(
                 acq_function=acq_func,
@@ -76,9 +93,13 @@ def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
                 num_restarts=NUM_RESTARTS,
                 raw_samples=RAW_SAMPLES,  # used for intialization heuristic
                 options={"batch_limit": 5, "maxiter": 200},
+                return_best_only=False
             )
-            candidates.append(candidate)
-        
+
+            for can in candidate:
+                # print(can.shape)
+                candidates.append(can)
+            # print(len(candidates))
     return candidates
     
 def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
@@ -106,6 +127,7 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
     X = torch.stack(candidates).squeeze(-2)
     posterior = obj_fn_gp.posterior(X)
     mean = posterior.mean
+    std = torch.sqrt(posterior.variance)
 
     if method == "convex":
         exp_weights = torch.exp(mean/T)
@@ -127,6 +149,22 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
             return part3[0, :]
         else:
             return X[torch.argmax(mean).item()]
+
+    if method == "topk":
+        # print((mean[1:, :] + std[1:, :]))
+        # print("topk", torch.argmax(mean[1:, :] + std[1:, :]).item()+1)
+        return X[torch.argmax(mean[1:, :] + std[1:, :]).item()+1]
+
+    if method == "topk_convex":
+        grad_pt_idx = torch.argmax(mean[1:, :] + std[1:, :]).item()+1
+        X = X[[0, grad_pt_idx], :]
+        mean = mean[[0, grad_pt_idx], :]
+        std = std[[0, grad_pt_idx], :]
+
+        exp_weights = torch.exp(mean + std/T)
+        part1 = exp_weights*X
+        part2 = part1/(exp_weights.sum())
+        return part2.sum(dim=0)
 
 def expo_temp_schedule(iter, T0=10000, alpha=0.9):
     return T0*np.power(alpha, iter)

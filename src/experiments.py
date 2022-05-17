@@ -5,7 +5,7 @@ import shutil
 import matplotlib.pyplot as plt
 from BO import BO
 from test_functions import *
-from CustomAcquistionFunction import CustomGradientAcquistionFunction
+from CustomAcquistionFunction import *
 
 class Experiment():
     def __init__(self, is_major_change, config, dtype):
@@ -14,7 +14,7 @@ class Experiment():
         self.obj_fn = self._get_appropriate_func()
         self.dtype = dtype
         
-        self.init_examples = 5
+        self.init_examples = config["init_examples"]
         base_size = self.config["budget"] + self.init_examples
         self.X = torch.empty((
             base_size,
@@ -40,8 +40,8 @@ class Experiment():
             TO-DO: If major change then copy the code as well.
         '''
         try:
-            self.exp_dir = "Experiments/" + self.config["experiment_name"]
-            os.mkdir(self.exp_dir)
+            self.exp_dir = os.path.join(self.config["exp_dir"], self.config["experiment_name"])
+            os.makedirs(self.exp_dir)
             # shutil.copy("./config.json", self.exp_dir)
         except Exception as e:
             import traceback
@@ -96,15 +96,23 @@ class Experiment():
             
         
     def perform_experiment(self):
+        grad_acq = (PrabuAcquistionFunction if 
+            self.config["grad_acq_func"] == "prabu" else 
+            SumGradientAcquisitionFunction)
+
         for i in range(self.config["runs"]):
             bo = BO(
                 obj_fn=self.obj_fn,
                 dtype=self.dtype,
-                acq_func=self.config["acq_func"],
-                grad_acq=CustomGradientAcquistionFunction,
-                init_examples=5,
+                acq_func=self.config["zobo_acq_func"],
+                grad_acq=grad_acq,
+                init_examples=self.init_examples,
                 order=self.config["order"], 
-                budget=self.config["budget"]
+                budget=self.config["budget"],
+                query_point_selection=self.config["query_point_selection"],
+                num_restarts=self.config["num_restarts"],
+                raw_samples=self.config["raw_samples"],
+                grad_acq_name=self.config["grad_acq_func"]
             )
             
             X, y, grads = bo.optimize()
