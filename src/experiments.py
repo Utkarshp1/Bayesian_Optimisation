@@ -1,14 +1,16 @@
 import os
-import json
-import torch
 import shutil
+
+import yaml
+import torch
 import matplotlib.pyplot as plt
+
 from BO import BO
 from test_functions import *
 from CustomAcquistionFunction import *
 
 class Experiment():
-    def __init__(self, is_major_change, config, dtype):
+    def __init__(self, is_major_change, config, dtype, mode='train'):
         self.is_major_change = is_major_change
         self.config = config
         self.obj_fn = self._get_appropriate_func()
@@ -31,8 +33,11 @@ class Experiment():
             self.config["dims"],
             self.config["runs"]
         ))
+
+        self.mode = mode
         
-        self._init_directory_structure()
+        if self.mode == 'train':
+            self._init_directory_structure()
         
         
     def _init_directory_structure(self):
@@ -40,7 +45,10 @@ class Experiment():
             TO-DO: If major change then copy the code as well.
         '''
         try:
-            self.exp_dir = os.path.join(self.config["exp_dir"], self.config["experiment_name"])
+            self.exp_dir = os.path.join(self.config["exp_dir"], 
+                self.config["objective_function"], 
+                self.config["experiment_name"]
+            )
             os.makedirs(self.exp_dir)
             # shutil.copy("./config.json", self.exp_dir)
         except Exception as e:
@@ -97,7 +105,7 @@ class Experiment():
         
     def perform_experiment(self):
         grad_acq = (PrabuAcquistionFunction if 
-            self.config["grad_acq_func"] == "prabu" else 
+            self.config["grad_acq_func"] == "PrabuAcquistionFunction" else 
             SumGradientAcquisitionFunction)
 
         for i in range(self.config["runs"]):
@@ -141,8 +149,9 @@ class Experiment():
         summary["optimal_value"] = (self.y.min().item() if 
             self.config["max/min"] == "min" else self.y.max().item())
         
-        with open(self.exp_dir + "/summary.json", "w") as outfile: 
-            json.dump(summary, outfile)
+        config_file = os.path.join(self.exp_dir, "config.yaml")
+        with open(config_file, "w") as outfile:
+            yaml.dump(summary, outfile)
             
         
     def plot_results(self):
@@ -163,6 +172,4 @@ class Experiment():
         x_vals = range(1, self.mean_regret.shape[0] - 4)
         plt.errorbar(x_vals, self.mean_regret[5:, 0], 0.1*self.std_regret[5:, 0], linestyle='solid', marker='D')
         # plt.plot(self.mean_regret[5:, 0])
-        plt.savefig(self.exp_dir + '/Mean_Regret_vs_Num_iterations.png')
-        
-        
+        plt.savefig(self.exp_dir + '/Mean_Regret_vs_Num_iterations.png')    

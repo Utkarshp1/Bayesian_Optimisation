@@ -135,7 +135,7 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
         part2 = part1/(exp_weights.sum())
         return part2.sum(dim=0)
     
-    if method == "minimum":
+    if method == "maximum":
         return X[torch.argmax(mean).item()]
 
     if method == "best":
@@ -156,14 +156,24 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
         return X[torch.argmax(mean[1:, :] + std[1:, :]).item()+1]
 
     if method == "topk_convex":
+        # print(mean[1:, :] + std[1:, :])
         grad_pt_idx = torch.argmax(mean[1:, :] + std[1:, :]).item()+1
+        # print(grad_pt_idx)
+        # print(X, X.shape)
         X = X[[0, grad_pt_idx], :]
+        # print(X, X.shape)
+        # print(mean, mean.shape)
+        # print(std, std.shape)
         mean = mean[[0, grad_pt_idx], :]
         std = std[[0, grad_pt_idx], :]
+        # print(mean, mean.shape)
+        # print(std, std.shape)
 
         exp_weights = torch.exp(mean + std/T)
+        # print(exp_weights)
         part1 = exp_weights*X
         part2 = part1/(exp_weights.sum())
+        # print(part2.sum(dim=0))
         return part2.sum(dim=0)
 
 def expo_temp_schedule(iter, T0=10000, alpha=0.9):
