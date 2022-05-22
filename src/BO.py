@@ -93,7 +93,7 @@ class BO:
             gps = get_and_fit_simple_custom_gp(
                 self.X.detach().clone(), 
                 self.y.detach().clone(), 
-                self.grads.detach().clone()
+                self.grads.detach().clone() if self.order else self.grads
             )
             obj_fn_gp, grad_gps = gps
             
