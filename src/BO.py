@@ -2,7 +2,7 @@ import torch
 from tqdm import tqdm
 from utils import generate_initial_data, optimize_acq_func_and_get_candidates, get_next_query_point, expo_temp_schedule
 from GaussianProcess import get_and_fit_simple_custom_gp
-from botorch.acquisition.analytic import ExpectedImprovement
+from botorch.acquisition.analytic import ExpectedImprovement, qKnowledgeGradient
 from botorch.utils.transforms import unnormalize, standardize, normalize
 
 class BO:
@@ -11,7 +11,7 @@ class BO:
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
         order=0, budget=20, query_point_selection="convex", temp_schedule=False,
-        num_restarts=2, raw_samples=32, 
+        num_restarts=2, raw_samples=32, num_fantasies=128,
         grad_acq_name="SumGradientAcquisitionFunction"):
         '''
             Arguments:
@@ -47,6 +47,8 @@ class BO:
                     function. Can take values: 
                     [SumGradientAcquisitionFunction, 
                     PrabuAcquistionFunction]
+                - num_fantasies: To be used in Knowledge Gradient 
+                    acquisition function.
         '''
         
         self.obj_fn = obj_fn
@@ -61,6 +63,7 @@ class BO:
         self.num_restarts = num_restarts
         self.raw_samples = raw_samples
         self.grad_acq_name = grad_acq_name
+        self.num_fantasies = num_fantasies
    
     def optimize(self):
         '''
@@ -107,6 +110,10 @@ class BO:
             if self.acq_func == 'EI':
                 best_f = torch.max(standardize(self.y))
                 acq_func = ExpectedImprovement(obj_fn_gp, best_f=best_f)
+            elif self.acq_func == 'KG':
+                print("Using KG Acquisition Function")
+                acq_func = qKnowledgeGradient(obj_fn_gp, 
+                    num_fantasies=self.num_fantasies)
 
             candidates = optimize_acq_func_and_get_candidates(
                 acq_func=acq_func,

@@ -1,4 +1,5 @@
 import os
+import glob
 
 import yaml
 import torch
@@ -12,6 +13,24 @@ def build_obj_func(config : dict):
         dtype=torch.double, mode='eval')
 
     return experiment.obj_fn
+
+def combine_output(config, exp_path, pattern='y_*.pt', out_name='y.pt'):
+    ys_path = glob.glob(os.path.join(exp_path, pattern))
+
+    base_size = config["budget"] + config["init_examples"]
+    y = torch.empty((
+        base_size,
+        1,
+        config["runs"]
+    ))
+
+    for i, y_path in enumerate(ys_path):
+        y[:, :, i] = torch.load(y_path)
+
+    torch.save(y, os.path.join(exp_path, out_name))
+
+    return y
+
 
 def process_output(y, obj_fn, init_examples, mode='max'):
     if mode=='min':
@@ -51,7 +70,7 @@ for exp in os.listdir(args.exps_dir):
 
         obj_fn = build_obj_func(config)
 
-        y = torch.load(os.path.join(exp_path, 'y.pt'))
+        y = combine_output(config, exp_path)
 
         mean_regret, std_regret = process_output(y, obj_fn, 
             config['init_examples'], mode=config['max/min'])

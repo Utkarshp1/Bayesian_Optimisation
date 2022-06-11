@@ -1,9 +1,10 @@
 import os
-import shutil
+import time
 
 import yaml
 import torch
-import matplotlib.pyplot as plt
+import numpy as np
+from mpi4py import MPI
 
 from BO import BO
 from test_functions import *
@@ -51,6 +52,13 @@ class Experiment():
             )
             os.makedirs(self.exp_dir)
             # shutil.copy("./config.json", self.exp_dir)
+
+            summary = {}
+            summary.update(self.config)
+            
+            config_file = os.path.join(self.exp_dir, "config.yaml")
+            with open(config_file, "w") as outfile:
+                yaml.dump(summary, outfile)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -101,75 +109,134 @@ class Experiment():
                 noise_variance=self.config["noise_variance"],
                 negate=(self.config["max/min"] == "min")
             )
+
+    def _set_random_seed(seed : int = 42):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        torch.random.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
             
         
-    def perform_experiment(self):
+    def perform_experiment(self, rank):
         grad_acq = (PrabuAcquistionFunction if 
             self.config["grad_acq_func"] == "PrabuAcquistionFunction" else 
             SumGradientAcquisitionFunction)
 
-        for i in range(self.config["runs"]):
-            bo = BO(
-                obj_fn=self.obj_fn,
-                dtype=self.dtype,
-                acq_func=self.config["zobo_acq_func"],
-                grad_acq=grad_acq,
-                init_examples=self.init_examples,
-                order=self.config["order"], 
-                budget=self.config["budget"],
-                query_point_selection=self.config["query_point_selection"],
-                num_restarts=self.config["num_restarts"],
-                raw_samples=self.config["raw_samples"],
-                grad_acq_name=self.config["grad_acq_func"]
-            )
-            
-            X, y, grads = bo.optimize()
-            
-            self.X[:, :, i] = X
-            self.y[:, :, i] = y.unsqueeze(dim=-1)
-            if self.config["order"]:
-                self.grads[:, :, i] = grads
-            self.save_results()
+        self._set_random_seed(rank+1)
+
+        bo = BO(
+            obj_fn=self.obj_fn,
+            dtype=self.dtype,
+            acq_func=self.config["zobo_acq_func"],
+            grad_acq=grad_acq,
+            init_examples=self.init_examples,
+            order=self.config["order"], 
+            budget=self.config["budget"],
+            query_point_selection=self.config["query_point_selection"],
+            num_restarts=self.config["num_restarts"],
+            raw_samples=self.config["raw_samples"],
+            grad_acq_name=self.config["grad_acq_func"],
+            num_fantasies=self.config['num_fantasies']
+        )
         
+        X, y, grads = bo.optimize()
+
         if self.config["max/min"] == "min":
-            self.y = -self.y
-            
-        self.plot_results()
-        self.save_results()
+            y = -y
+
+        torch.save(X, self.exp_dir + f'/X_{rank}.pt')
+        torch.save(y, self.exp_dir + f'/y_{rank}.pt')
+        if grads is not None:
+            torch.save(grads, self.exp_dir + f'/grads_{rank}.pt')
         
-                
-    def save_results(self):
-        torch.save(self.X, self.exp_dir + '/X.pt')
-        torch.save(self.y, self.exp_dir + '/y.pt')
-        torch.save(self.grads, self.exp_dir + '/grads.pt')
+    def sched_jobs(self,comm,free_ranks,required,l):
+        used = []
+        minimum = min(len(free_ranks),len(required))
+        for i in range(minimum):
+            job_details = {'job_id':i+l}
+            comm.send(job_details,dest =free_ranks[i])
+            used.append(free_ranks[i])
+        tmp = [] 
+        for i in free_ranks:
+            if i not in used:
+                tmp.append(i)
+        completed = minimum
+        free_ranks = tmp
+        return free_ranks,completed
+
+    def multi(self):
+        comm = MPI.COMM_WORLD
+        n_processors = comm.Get_size()
+        rank = comm.Get_rank()
+        name = MPI.Get_processor_name()
+        n_runs = self.config["runs"]
+       
+        if rank == 0:
+            free_ranks = [i for i in range(1,n_processors)]
+            required = [i for i in range(n_runs)]
+
+            if(len(required) <= len(free_ranks)):
+                free_ranks,completed = self.sched_jobs(
+                    comm,
+                    free_ranks,
+                    required,
+                    0
+                )
+                time.sleep(2)
+                print("Total Jobs Added...",completed)
+            else:
+                free_ranks,completed = self.sched_jobs(
+                    MPI.COMM_WORLD,
+                    free_ranks,
+                    required[0:len(free_ranks)],
+                    0
+                )
+                total_completed = completed
+                print("Total Jobs Added...",total_completed)
+                done = False
+                while not done:
+                    time.sleep(2)
+                    for pr in range(1, n_processors):
+                        if comm.iprobe(pr):
+                            comm.recv(source=pr)
+                            free_ranks.append(pr)
+                    tmp = total_completed
+                    free_ranks,completed = self.sched_jobs(
+                        MPI.COMM_WORLD,
+                        free_ranks,
+                        required[total_completed:],
+                        total_completed
+                    )
+                    total_completed += completed
+                    if tmp != total_completed:
+                        print("Total Jobs Added...",total_completed)
+                    if total_completed ==len(required):
+                        done = True
+            time.sleep(10)
+
+            killed_ranks = []
+
+            while len(killed_ranks) < n_processors - 1:
+                for krank in free_ranks:
+                    task_kill = {'exit': True}
+                    comm.send(task_kill, krank)
+                    killed_ranks.append(krank)
+                free_ranks = []
+                time.sleep(2)
+                for pr in range(1, n_processors):
+                    if pr not in killed_ranks and comm.iprobe(pr):
+                        comm.recv(source=pr)
+                        free_ranks.append(pr)
+            print("Ranks Killed...",len(killed_ranks))
+            print("Rank 0 exiting...")
         
-        summary = {}
-        summary.update(self.config)
-        # summary["mean_regret"] = self.mean_regret
-        summary["optimal_value"] = (self.y.min().item() if 
-            self.config["max/min"] == "min" else self.y.max().item())
-        
-        config_file = os.path.join(self.exp_dir, "config.yaml")
-        with open(config_file, "w") as outfile:
-            yaml.dump(summary, outfile)
-            
-        
-    def plot_results(self):
-        if self.config["max/min"] == "min":
-            cum_min, _ = torch.cummin(self.y, dim=0)
-            self.regret = torch.log10(
-                torch.abs(cum_min - self.obj_fn.true_opt_value)
-            )
         else:
-            cum_max, _ = torch.cummax(self.y, dim=0)
-            self.regret = torch.log10(
-                torch.abs(cum_max - self.obj_fn.true_opt_value)
-            )
-        self.mean_regret = self.regret.mean(dim=-1)
-        self.std_regret = self.regret.std(dim=-1)
-        
-        plt.figure()
-        x_vals = range(1, self.mean_regret.shape[0] - 4)
-        plt.errorbar(x_vals, self.mean_regret[5:, 0], 0.1*self.std_regret[5:, 0], linestyle='solid', marker='D')
-        # plt.plot(self.mean_regret[5:, 0])
-        plt.savefig(self.exp_dir + '/Mean_Regret_vs_Num_iterations.png')    
+            name = MPI.Get_processor_name()
+            while True:
+                job_details = comm.recv(source=0)
+                if 'exit' in job_details:
+                    break
+
+                self.perform_experiment(job_details['job_id'])
+
+                comm.send(0, dest=0)    

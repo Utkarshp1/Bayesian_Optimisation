@@ -50,6 +50,8 @@ parser.add_argument('-nr', '--num_restarts', type=int, default=10,
     help='Number of restarts for acquisition function optimisation')
 parser.add_argument('-rs', '--raw_samples', type=int, default=32,
     help='Number of raw samples for acquisition function optimisation')
+parser.add_argument('-nf', '--num_fantasises', type=int, default=128,
+    help='Number of Fantasies for Knowledge Gradient Acquisition Function')
 parser.add_argument('-s', '--seed', type=int, default=42, help='Random seed')
 parser.add_argument('-i', '--init_examples', type=int, default=5,
     help='Number of initial data samples to be used')
@@ -60,4 +62,4 @@ print(config)
 dtype = torch.double
 
 experiment = Experiment(is_major_change=False, config=config, dtype=dtype)
-experiment.perform_experiment()
+experiment.multi()
