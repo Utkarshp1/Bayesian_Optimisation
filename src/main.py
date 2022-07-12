@@ -14,7 +14,8 @@ parser.add_argument('-ed', '--exp_dir', type=str, default='./',
 
 # Objective Function
 parser.add_argument('-obj_fn', '--objective_function', type=str, required=True,
-    choices=['le_branke', 'branin', 'levy', 'rosenbrock', 'ackley', 'hartmann'],
+    choices=['le_branke', 'branin', 'levy', 'rosenbrock', 'ackley', 'hartmann', 
+    'illustrationNd'],
     help='Objective function to maximize')
 parser.add_argument('-m', '--max/min', type=str, default='max',
     choices=['max', 'min'],

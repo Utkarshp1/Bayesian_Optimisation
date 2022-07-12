@@ -1,5 +1,6 @@
 import math
 import torch
+from torch.autograd.grad_mode import F
 from ObjectiveFunction import ObjectiveFunction
 
 class LeBranke(ObjectiveFunction):
@@ -267,6 +268,110 @@ class Hartmann(ObjectiveFunction):
         if self.dims == 4:
             H = (1.1 + H) / 0.839
         return H
+
+class IllustrationND(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self, dims, dtype, noise_mean=None, noise_variance=None):
+
+        low = torch.tensor([0.1]*dims)
+        high = torch.tensor([2.0]*dims)
+        
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            negate=True,
+        )
+        self.true_opt_value = None
+        self.dtype = dtype
+
+    def evaluate_true(self, X, theta):
+        sigma = 0.1
+        n_trials = 100
+        temperature = 0.05
+        n_model_candidates = 2
+
+        grads = []
+        f_x = []
+        for i in range(len(X)):
+            grads.append([])
+            f_x.append([])
+            l = X[i].detach().clone().requires_grad_(True)
+
+            for j in range(n_trials):
+                # perturb the model parameters
+                theta_list = torch.cat([(theta[i] + sigma * torch.randn_like(theta[i])).unsqueeze(0) 
+                    for _ in range(n_model_candidates)], dim=0)
+
+                # calculate loss of the model copies
+                loss_list = self.trn_loss(theta_list, l)
+
+                # calculate the model copies weights
+                weights = torch.softmax(-loss_list / temperature, 0)
+
+                # merge the model copies
+                temp = weights * theta_list.T
+                theta_updated = torch.sum(temp.T, dim=0)
+
+                # evaluate the merged model on validation
+                loss_val = self.val_loss(theta_updated)
+
+                # calculate the hypergradient
+                hyper_grad = torch.autograd.grad(loss_val, l)[0]
+                grads[-1].append(hyper_grad.detach())
+                f_x[-1].append(loss_val)
+
+            grads[-1] = torch.stack(grads[-1])
+            f_x[-1] = torch.stack(f_x[-1])
+
+        grad = torch.stack(grads)
+        f_x = torch.stack(f_x)
+        f_x = f_x.mean(dim=1)
+        grad = grad.mean(dim=1)
+
+        self.f_x = -f_x
+        self.grads = -grad
+
+        return self.f_x.squeeze()
+
+    def backward(self):
+        return self.grads.detach().clone()
+
+    def trn_loss(self, x, l):
+        return torch.sum((x-1)**2, dim=1) + torch.sum(l*(x**2), dim=1)
+
+    def val_loss(self, x):
+        return torch.sum((x-0.5)**2)
+
+    def find_optimal_theta(self, X):
+        X = X.detach().clone()
+        X.requires_grad = False
+        theta = torch.randn_like(X, requires_grad=True, dtype=self.dtype)
+        optimizer = torch.optim.Adam([theta], lr=1e-2)
+
+        batch = X.ndimension() > 1
+
+        external_grad = torch.tensor([1.]*X.shape[0]) if batch else None
+
+        for i in range(1000):
+            optimizer.zero_grad()
+            func_value = self.train_loss(theta, X)
+            func_value.backward(gradient=external_grad)
+            # print(theta.grad)
+            optimizer.step()
+
+        return theta.detach().clone()
+
+    def train_loss(self, x, l):
+        batch = x.ndimension() > 1
+        x = x if batch else x.unsqueeze(0)
+
+        trn_loss = torch.sum((x-1)**2, dim=1) + torch.sum(l*(x**2),     dim=1)
+
+        return trn_loss if batch else trn_loss.squeeze()
 
 if __name__ == "__main__":
     '''

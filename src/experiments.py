@@ -13,8 +13,8 @@ class Experiment():
     def __init__(self, is_major_change, config, dtype, mode='train'):
         self.is_major_change = is_major_change
         self.config = config
-        self.obj_fn = self._get_appropriate_func()
         self.dtype = dtype
+        self.obj_fn = self._get_appropriate_func()
         
         self.init_examples = config["init_examples"]
         base_size = self.config["budget"] + self.init_examples
@@ -101,6 +101,14 @@ class Experiment():
                 noise_variance=self.config["noise_variance"],
                 negate=(self.config["max/min"] == "min")
             )
+
+        if self.config["objective_function"] == "illustrationNd":
+            return IllustrationND(
+                dims=self.config["dims"],
+                noise_mean=self.config["noise_mean"],
+                noise_variance=self.config["noise_variance"],
+                dtype=self.dtype
+            )
             
         
     def perform_experiment(self):
@@ -135,7 +143,7 @@ class Experiment():
             self.y = -self.y
             
         self.plot_results()
-        self.save_results()
+        # self.save_results()
         
                 
     def save_results(self):

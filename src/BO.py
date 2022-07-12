@@ -11,7 +11,7 @@ class BO:
     '''
     def __init__(self, obj_fn, dtype, acq_func, grad_acq=None, init_examples=5,
         order=0, budget=20, query_point_selection="convex", temp_schedule=False,
-        num_restarts=2, raw_samples=32, 
+        num_restarts=2, raw_samples=32, num_fantasies=128,
         grad_acq_name="SumGradientAcquisitionFunction"):
         '''
             Arguments:
@@ -47,6 +47,8 @@ class BO:
                     function. Can take values: 
                     [SumGradientAcquisitionFunction, 
                     PrabuAcquistionFunction]
+                - num_fantasies: To be used in Knowledge Gradient 
+                    acquisition function.
         '''
         
         self.obj_fn = obj_fn
@@ -61,6 +63,7 @@ class BO:
         self.num_restarts = num_restarts
         self.raw_samples = raw_samples
         self.grad_acq_name = grad_acq_name
+        self.num_fantasies = num_fantasies
    
     def optimize(self):
         '''
@@ -107,6 +110,10 @@ class BO:
             if self.acq_func == 'EI':
                 best_f = torch.max(standardize(self.y))
                 acq_func = ExpectedImprovement(obj_fn_gp, best_f=best_f)
+            elif self.acq_func == 'KG':
+                print("Using KG Acquisition Function")
+                acq_func = qKnowledgeGradient(obj_fn_gp, 
+                    num_fantasies=self.num_fantasies)
 
             candidates = optimize_acq_func_and_get_candidates(
                 acq_func=acq_func,
@@ -132,12 +139,17 @@ class BO:
             
             # Unnormalize the best candidate
             best_candidate = unnormalize(best_candidate, bounds=norm_bounds)
+            theta = self.obj_fn.find_optimal_theta(best_candidate)
+
+            batch = theta.ndimension() > 1
+            theta = theta if batch else theta.unsqueeze(0)
+            best_candidate = best_candidate if batch else best_candidate.unsqueeze(0)
             
             # Function and gradient evaluation at the new point
-            y_new = self.obj_fn.forward(best_candidate).unsqueeze(0).detach().clone()
+            y_new = self.obj_fn.evaluate_true(best_candidate, theta).unsqueeze(0).detach().clone()
             if self.order:
                 grad_new = self.obj_fn.backward().detach().clone()
-            best_candidate = best_candidate.unsqueeze(0)
+            # best_candidate = best_candidate.unsqueeze(0)
             
             # Update X, y and grads
             self.X = torch.cat([self.X, best_candidate])
