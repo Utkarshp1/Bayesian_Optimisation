@@ -1,5 +1,10 @@
 import math
 import torch
+import torch.nn as nn
+from operator import mul
+from torch.autograd.grad_mode import F
+from higher.utils import get_func_params
+from higher.patch import make_functional
 from ObjectiveFunction import ObjectiveFunction
 
 class LeBranke(ObjectiveFunction):
@@ -267,6 +272,181 @@ class Hartmann(ObjectiveFunction):
         if self.dims == 4:
             H = (1.1 + H) / 0.839
         return H
+
+class IllustrationND(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self, dims, noise_mean=None, noise_variance=None):
+
+        low = torch.tensor([0.1]*dims)
+        high = torch.tensor([2.0]*dims)
+        
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=noise_mean,
+            noise_variance=noise_variance,
+            negate=True,
+        )
+        self.true_opt_value = None
+
+    def evaluate_true(self, X, theta):
+        sigma = 0.1
+        n_trials = 100
+        temperature = 0.05
+        n_model_candidates = 2
+
+        grads = []
+        f_x = []
+        for i in range(len(X)):
+            grads.append([])
+            f_x.append([])
+            l = X[i].detach().clone().requires_grad_(True)
+
+            for j in range(n_trials):
+                # perturb the model parameters
+                theta_list = torch.cat([(theta[i] + sigma * torch.randn_like(theta[i])).unsqueeze(0) 
+                    for _ in range(n_model_candidates)], dim=0)
+
+                # calculate loss of the model copies
+                loss_list = self.trn_loss(theta_list, l)
+
+                # calculate the model copies weights
+                weights = torch.softmax(-loss_list / temperature, 0)
+
+                # merge the model copies
+                temp = weights * theta_list.T
+                theta_updated = torch.sum(temp.T, dim=0)
+
+                # evaluate the merged model on validation
+                loss_val = self.val_loss(theta_updated)
+
+                # calculate the hypergradient
+                hyper_grad = torch.autograd.grad(loss_val, l)[0]
+                grads[-1].append(hyper_grad.detach())
+                f_x[-1].append(loss_val)
+
+            grads[-1] = torch.stack(grads[-1])
+            f_x[-1] = torch.stack(f_x[-1])
+
+        grad = torch.stack(grads)
+        f_x = torch.stack(f_x)
+        grad = grad.mean(dim=1)
+
+        self.f_x = -f_x
+        self.grads = -grad
+
+        return self.f_x.squeeze()
+
+    def backward(self):
+        return self.grads.detach().clone()
+
+    def trn_loss(self, x, l):
+        return torch.sum((x-1)**2, dim=1) + torch.sum(l*(x**2), dim=1)
+
+    def val_loss(self, x):
+        return torch.sum((x-0.5)**2)
+
+    def find_optimal_theta(self, X):
+        X = X.detach().clone()
+        X.requires_grad = False
+        theta = torch.randn_like(X, requires_grad=True, dtype=self.dtype)
+        optimizer = torch.optim.Adam([theta], lr=1e-2)
+
+        batch = X.ndimension() > 1
+
+        external_grad = torch.tensor([1.]*self.X.shape[0]) if batch else None
+
+        for i in range(1000):
+            optimizer.zero_grad()
+            func_value = self.train_loss(theta, X)
+            func_value.backward(gradient=external_grad)
+            # print(theta.grad)
+            optimizer.step()
+
+        return theta.detach().clone()
+
+    def train_loss(self, x, l):
+        batch = x.ndimension() > 1
+        x = x if batch else x.unsqueeze(0)
+
+        trn_loss = torch.sum((x-1)**2, dim=1) + torch.sum(l*(x**2),     dim=1)
+
+        return trn_loss if batch else trn_loss.squeeze()
+
+class RotationTransformation(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self, lenet, input_, target, input_rot, target_rot, 
+        feature_transformer, device):
+        
+        torch.pi = torch.acos(torch.zeros(1)).item() * 2
+
+        dims=1
+        low = torch.tensor([0.0])
+        high = torch.tensor([2*torch.pi])
+
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=0,
+            noise_variance=None,
+            negate=True
+        )
+
+        self.lenet = lenet
+        self.input_ = input_
+        self.model_patched = make_functional(self.lenet)
+        self.target = target
+        self.input_rot = input_rot
+        self.target_rot = target_rot
+        self.feature_transformer = feature_transformer
+        self.device = device
+
+    def evaluate_true(self, X=None):
+        sigma = 0.001
+        temperature = 0.05
+        n_model_candidates = 2
+
+        criterion = nn.CrossEntropyLoss().to(device=self.device)
+
+        model_parameter = [i.detach() for i in get_func_params(self.lenet)]
+        input_transformed = self.feature_transformer(self.input_)
+
+        theta_list = [[j + sigma * torch.sign(torch.randn_like(j)) for j in model_parameter] for i in range(n_model_candidates)]
+        pred_list = [self.model_patched(input_transformed, params=theta) for theta in theta_list]
+        loss_list = [criterion(pred, self.target) for pred in pred_list]
+        baseline_loss = criterion(self.model_patched(input_transformed, params=model_parameter), self.target)
+
+        # calculate weights for the different model copies
+        weights = torch.softmax(-torch.stack(loss_list)/temperature, 0)
+
+        # merge the model copies
+        theta_updated = [sum(map(mul, theta, weights)) for theta in zip(*theta_list)]
+        pred_rot = self.model_patched(self.input_rot, params=theta_updated)
+
+        self.f_x = -1*criterion(pred_rot, self.target_rot)
+
+        return self.f_x
+
+    def backward(self, noise=False):
+        self.feature_transformer.zero_grad()
+        self.f_x.backward()
+
+        counter = 0
+        for i in self.feature_transformer.parameters():
+            counter += 1
+
+        if counter > 1:
+            print("Length of parameters: ", counter)
+            print("Parameters: ", self.feature_transformer.parameters())
+            raise Exception("More than one parameter")
+
+        self.grads = next(self.feature_transformer.parameters()).grad
+
+        return self.grads.detach().clone()
 
 if __name__ == "__main__":
     '''

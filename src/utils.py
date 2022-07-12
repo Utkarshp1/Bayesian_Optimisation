@@ -20,9 +20,10 @@ def generate_initial_data(obj_fn, n, dtype, order=0):
     '''
     X_train = torch.rand(n, obj_fn.dims, dtype=dtype)
     X_train = X_train*obj_fn.high + obj_fn.low
-    y_train = obj_fn.forward(X_train)
+    theta = obj_fn.find_optimal_theta(X_train)
+    y_train = obj_fn.evaluate_true(X_train, theta)
     if order:
-        grads = obj_fn.backward()
+        grads = obj_fn.backward().detach().clone()
         return X_train.detach().clone(), y_train, grads
     else:
         return X_train.detach().clone(), y_train, None
@@ -175,6 +176,16 @@ def get_next_query_point(obj_fn_gp, candidates, method="convex", T=1):
         part2 = part1/(exp_weights.sum())
         # print(part2.sum(dim=0))
         return part2.sum(dim=0)
+
+    if method == "topk_max":
+        grad_pt_idx = torch.argmax(mean[1:, :] + std[1:, :]).item()+1
+        # print(grad_pt_idx)
+        # print(X, X.shape)
+        X = X[[0, grad_pt_idx], :]
+        mean = mean[[0, grad_pt_idx], :]
+        std = std[[0, grad_pt_idx], :]
+
+        return X[torch.argmax(mean + std).item()]
 
 def expo_temp_schedule(iter, T0=10000, alpha=0.9):
     return T0*np.power(alpha, iter)

@@ -110,6 +110,13 @@ class Experiment():
                 negate=(self.config["max/min"] == "min")
             )
 
+        if self.config["objective_function"] == "illustrationNd":
+            return IllustrationND(
+                dims=self.config["dims"],
+                noise_mean=self.config["noise_mean"],
+                noise_variance=self.config["noise_variance"]
+            )
+
     def _set_random_seed(seed : int = 42):
         torch.manual_seed(seed)
         np.random.seed(seed)

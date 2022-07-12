@@ -1,5 +1,5 @@
 EXPDIR=./$(shell date +%F)
-ZACQ=KG
+ZACQ=EI
 BUDGET=200
 RUNS=225
 NOISEMEAN=0.0
@@ -37,3 +37,9 @@ ackley: basic
 hartmann: basic
 	./run.sh hartmann min 6 $(ARGS)
 	python3 post_process.py -e $(EXPDIR)/hartmann/ -s 0.1 -x Number\ of\ Iterations -y Mean\ Regret
+
+illustration6d: basic
+	./run.sh illustrationNd min 6 $(ARGS)
+
+illustration10d: basic
+	./run.sh illustrationNd min 10 $(ARGS)
