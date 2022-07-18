@@ -1,7 +1,16 @@
 import math
 import torch
+import torch.nn as nn
+from operator import mul
 from torch.autograd.grad_mode import F
+from higher.utils import get_func_params
+from higher.patch import make_functional
+
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from ObjectiveFunction import ObjectiveFunction
+from rot_trans_utils import LeNet, get_device, get_dataloaders, RotTransformer
 
 class LeBranke(ObjectiveFunction):
     '''
@@ -372,6 +381,119 @@ class IllustrationND(ObjectiveFunction):
         trn_loss = torch.sum((x-1)**2, dim=1) + torch.sum(l*(x**2),     dim=1)
 
         return trn_loss if batch else trn_loss.squeeze()
+
+class RotationTransformation(ObjectiveFunction):
+    '''
+    '''
+    def __init__(self):
+        
+        torch.pi = torch.acos(torch.zeros(1)).item() * 2
+
+        dims=1
+        low = torch.tensor([0.0])
+        high = torch.tensor([2*torch.pi])
+
+        super().__init__(
+            dims,
+            low,
+            high,
+            noise_mean=0,
+            noise_variance=None,
+            negate=True
+        )
+
+        self.epochs = 5
+        self.device = get_device()
+        self.dataloaders = get_dataloaders()
+        self.feature_transformer = RotTransformer(device=self.device).to(device=self.device)
+        
+
+    def evaluate_true(self, X=None):
+        sigma = 0.001
+        temperature = 0.05
+        n_model_candidates = 2
+
+        criterion = nn.CrossEntropyLoss().to(device=self.device)
+
+        self.f_x = 0
+
+        for i, batch in enumerate(self.dataloaders[2]):
+            (input_rot, target_rot) = batch
+            input_rot = input_rot.to(device=self.device)
+            target_rot = target_rot.to(device=self.device)
+
+            model_parameter = [i.detach() for i in get_func_params(self.lenet)]
+            input_transformed = self.feature_transformer(self.input_)
+
+            theta_list = [[j + sigma * torch.sign(torch.randn_like(j)) for j in model_parameter] for i in range(n_model_candidates)]
+            pred_list = [self.model_patched(input_transformed, params=theta) for theta in theta_list]
+            loss_list = [criterion(pred, self.target) for pred in pred_list]
+            baseline_loss = criterion(self.model_patched(input_transformed, params=model_parameter), self.target)
+
+            # calculate weights for the different model copies
+            weights = torch.softmax(-torch.stack(loss_list)/temperature, 0)
+
+            # merge the model copies
+            theta_updated = [sum(map(mul, theta, weights)) for theta in zip(*theta_list)]
+            pred_rot = self.model_patched(input_rot, params=theta_updated)
+
+            self.f_x += -1*criterion(pred_rot, target_rot)
+
+        return self.f_x/len(self.dataloaders[2])
+
+    def backward(self, noise=False):
+        self.feature_transformer.zero_grad()
+        self.f_x.backward()
+
+        counter = 0
+        for i in self.feature_transformer.parameters():
+            counter += 1
+
+        if counter > 1:
+            print("Length of parameters: ", counter)
+            print("Parameters: ", self.feature_transformer.parameters())
+            raise Exception("More than one parameter")
+
+        self.grads = next(self.feature_transformer.parameters()).grad
+
+        return self.grads.detach().clone()/len(self.dataloaders[2])
+
+    def find_optimal_theta(self, X):
+        self._reset(X)
+
+        optimizer = torch.optim.Adam(self.lenet.parameters(), lr=1e-3)
+        criterion = nn.CrossEntropyLoss().to(device=self.device)
+
+        for epoch in range(self.epochs):
+            loaders = self.dataloaders[0]
+
+            for i, batch in enumerate(loaders):
+                (input_, target) = batch
+                input_ = input_.to(device=self.device)
+                target = target.to(device=self.device)
+
+                logits = self.lenet(self.feature_transformer(input_))
+                loss = criterion(logits, target)
+                # with torch.no_grad():
+                #     self.losses.append(loss.item())
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        self.input_ = input_
+        self.target = target
+
+    def _reset(self, X):
+        with torch.no_grad():
+            for p in self.feature_transformer.parameters():
+                p.copy_(X.squeeze(0))
+            for p in self.feature_transformer.parameters():
+                print(p)
+
+        self.lenet = LeNet().to(device=self.device)
+        self.model_patched = make_functional(self.lenet)
+
+
 
 if __name__ == "__main__":
     '''

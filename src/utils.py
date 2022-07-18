@@ -20,13 +20,20 @@ def generate_initial_data(obj_fn, n, dtype, order=0):
     '''
     X_train = torch.rand(n, obj_fn.dims, dtype=dtype)
     X_train = X_train*obj_fn.high + obj_fn.low
-    theta = obj_fn.find_optimal_theta(X_train)
-    y_train = obj_fn.evaluate_true(X_train, theta)
-    if order:
-        grads = obj_fn.backward().detach().clone()
-        return X_train.detach().clone(), y_train, grads
-    else:
-        return X_train.detach().clone(), y_train, None
+    y_train = []
+    grads = [] if order else None
+    for X in X_train:
+        print(X.shape)
+        theta = obj_fn.find_optimal_theta(X)
+        y_train.append(obj_fn.evaluate_true().detach().clone())
+        if order:
+            grads.append(obj_fn.backward().detach().clone())
+
+    y_train = torch.stack(y_train)
+    grads = torch.stack(grads) if order else None
+        
+    return X_train.detach().clone(), y_train, grads
+    
     
 def optimize_acq_func_and_get_candidates(acq_func, grad_acq, bounds, grad_gps,
         order=0, num_restarts=2, raw_samples=32, 

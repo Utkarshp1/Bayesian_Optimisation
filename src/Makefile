@@ -42,3 +42,6 @@ illustration6d: basic
 
 illustration10d: basic
 	./run.sh illustrationNd min 10 $(ARGS)
+
+rotation_transformer: basic
+	./run.sh rotation_transformer min 1 $(ARGS)

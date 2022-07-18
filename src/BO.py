@@ -139,16 +139,17 @@ class BO:
             
             # Unnormalize the best candidate
             best_candidate = unnormalize(best_candidate, bounds=norm_bounds)
-            theta = self.obj_fn.find_optimal_theta(best_candidate)
+            self.obj_fn.find_optimal_theta(best_candidate)
 
-            batch = theta.ndimension() > 1
-            theta = theta if batch else theta.unsqueeze(0)
-            best_candidate = best_candidate if batch else best_candidate.unsqueeze(0)
+            # batch = theta.ndimension() > 1
+            # theta = theta if batch else theta.unsqueeze(0)
+            best_candidate = best_candidate.unsqueeze(0)
             
             # Function and gradient evaluation at the new point
-            y_new = self.obj_fn.evaluate_true(best_candidate, theta).unsqueeze(0).detach().clone()
+            y_new = self.obj_fn.evaluate_true().unsqueeze(0).detach().clone()
             if self.order:
                 grad_new = self.obj_fn.backward().detach().clone()
+                grad_new = grad_new.unsqueeze(0)
             # best_candidate = best_candidate.unsqueeze(0)
             
             # Update X, y and grads

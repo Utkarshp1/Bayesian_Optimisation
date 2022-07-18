@@ -109,6 +109,9 @@ class Experiment():
                 noise_variance=self.config["noise_variance"],
                 dtype=self.dtype
             )
+
+        if self.config["objective_function"] == "rotation_transformer":
+            return RotationTransformation()
             
         
     def perform_experiment(self):
