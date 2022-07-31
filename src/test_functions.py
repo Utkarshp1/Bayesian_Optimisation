@@ -439,7 +439,7 @@ class RotationTransformation(ObjectiveFunction):
 
             self.f_x += -1*criterion(pred_rot, target_rot)
 
-        return self.f_x/len(self.dataloaders[2])
+        return (self.f_x/len(self.dataloaders[2])).cpu()
 
     def backward(self, noise=False):
         self.feature_transformer.zero_grad()
@@ -456,7 +456,7 @@ class RotationTransformation(ObjectiveFunction):
 
         self.grads = next(self.feature_transformer.parameters()).grad
 
-        return self.grads.detach().clone()/len(self.dataloaders[2])
+        return (self.grads.detach().clone()/len(self.dataloaders[2])).cpu()
 
     def find_optimal_theta(self, X):
         self._reset(X)
